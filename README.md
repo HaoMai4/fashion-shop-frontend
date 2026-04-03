@@ -1,2 +1,3 @@
-# fashion-shop-frontend
-Frontend ReactJS for Fashion Shop Website
+# Welcome to your Lovable project
+
+TODO: Document your project here
