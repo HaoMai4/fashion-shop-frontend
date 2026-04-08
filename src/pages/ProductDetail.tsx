@@ -1,161 +1,532 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronRight, Star, Heart, ShoppingBag, Minus, Plus, Bot, Truck, RotateCcw, Shield } from 'lucide-react';
+import {
+  ChevronRight,
+  Star,
+  Heart,
+  ShoppingBag,
+  Minus,
+  Plus,
+  Bot,
+  Truck,
+  RotateCcw,
+  Shield,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import MainLayout from '@/components/layout/MainLayout';
-import ProductCard from '@/components/ProductCard';
 import { productService } from '@/services/api/productService';
-import { SanPham, DanhGiaSanPham } from '@/types';
+import { SanPham } from '@/types';
 import { useCart } from '@/hooks/useCart';
 import { useWishlist } from '@/hooks/useWishlist';
-import { formatPrice, getDiscountPercent, formatDate } from '@/utils/format';
+import { formatPrice, getDiscountPercent } from '@/utils/format';
 
 export default function ProductDetail() {
   const { slug } = useParams();
   const [product, setProduct] = useState<SanPham | null>(null);
-  const [related, setRelated] = useState<SanPham[]>([]);
-  const [reviews, setReviews] = useState<DanhGiaSanPham[]>([]);
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
+  const [selectedImage, setSelectedImage] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
+
   const { addItem } = useCart();
-  const { addItem: addWishlist, removeItem: removeWishlist, isInWishlist } = useWishlist();
+  const {
+    addItem: addWishlist,
+    removeItem: removeWishlist,
+    isInWishlist,
+  } = useWishlist();
 
   useEffect(() => {
     if (!slug) return;
-    setLoading(true);
-    productService.getBySlug(slug).then(p => {
-      setProduct(p || null);
-      if (p) {
-        setSelectedColor(p.mauSac[0]?.ten || '');
-        setSelectedSize(p.kichCo[0] || '');
-        productService.getRelated(p.id).then(setRelated);
-        productService.getReviews(p.id).then(setReviews);
+
+    let isMounted = true;
+
+    const loadProduct = async () => {
+      try {
+        setLoading(true);
+
+        const p = await productService.getBySlug(slug);
+
+        if (!isMounted) return;
+
+        if (!p) {
+          setProduct(null);
+          return;
+        }
+
+        const firstVariant = p.bienThe?.[0];
+        const firstColor = firstVariant?.mau || p.mauSac?.[0]?.ten || '';
+        const firstSize =
+          firstVariant?.kichThuoc?.find((s) => s.stock > 0)?.size ||
+          firstVariant?.kichThuoc?.[0]?.size ||
+          p.colorSizeMap?.[firstColor]?.[0] ||
+          p.kichCo?.[0] ||
+          '';
+
+        const firstImage =
+          firstVariant?.hinhAnh?.[0] ||
+          p.hinhAnhList?.[0] ||
+          p.hinhAnh ||
+          '/placeholder.svg';
+
+        setProduct(p);
+        setSelectedColor(firstColor);
+        setSelectedSize(firstSize);
+        setSelectedImage(firstImage);
+        setQuantity(1);
+      } catch (err) {
+        console.error('Load product detail failed:', err);
+        if (isMounted) {
+          setProduct(null);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
-    });
+    };
+
+    loadProduct();
+
+    return () => {
+      isMounted = false;
+    };
   }, [slug]);
 
-  if (loading) return <MainLayout><div className="container mx-auto px-4 py-20 text-center text-muted-foreground">Đang tải...</div></MainLayout>;
-  if (!product) return <MainLayout><div className="container mx-auto px-4 py-20 text-center"><p className="text-lg font-medium">Không tìm thấy sản phẩm</p><Button asChild className="mt-4"><Link to="/san-pham">Quay lại cửa hàng</Link></Button></div></MainLayout>;
+  useEffect(() => {
+    if (!product) return;
+
+    const selectedVariant =
+      product.bienThe?.find((v) => v.mau === selectedColor) ||
+      product.bienThe?.[0];
+
+    const variantAvailableSizes =
+      selectedVariant?.kichThuoc
+        ?.filter((s) => s.stock > 0)
+        .map((s) => s.size) || [];
+
+    const mappedSizes = product.colorSizeMap?.[selectedColor] || [];
+
+    const availableSizes =
+      variantAvailableSizes.length > 0
+        ? variantAvailableSizes
+        : mappedSizes.length > 0
+        ? mappedSizes
+        : product.kichCo || [];
+
+    const uniqueAvailableSizes = Array.from(new Set(availableSizes));
+
+    if (
+      uniqueAvailableSizes.length > 0 &&
+      !uniqueAvailableSizes.includes(selectedSize)
+    ) {
+      setSelectedSize(uniqueAvailableSizes[0]);
+    }
+
+    const selectedSizeInfo =
+      selectedVariant?.kichThuoc?.find((s) => s.size === selectedSize) ||
+      selectedVariant?.kichThuoc?.find((s) => s.stock > 0) ||
+      selectedVariant?.kichThuoc?.[0];
+
+    const currentStock = selectedSizeInfo?.stock ?? product.soLuongTon ?? 0;
+
+    setQuantity((q) => {
+      if (currentStock <= 0) return 1;
+      return Math.min(Math.max(q, 1), currentStock);
+    });
+  }, [product, selectedColor, selectedSize]);
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="container mx-auto px-4 py-20 text-center text-muted-foreground">
+          Đang tải...
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!product) {
+    return (
+      <MainLayout>
+        <div className="container mx-auto px-4 py-20 text-center">
+          <p className="text-lg font-medium">Không tìm thấy sản phẩm</p>
+          <Button asChild className="mt-4">
+            <Link to="/san-pham">Quay lại cửa hàng</Link>
+          </Button>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const selectedVariant =
+    product.bienThe?.find((v) => v.mau === selectedColor) ||
+    product.bienThe?.[0];
+
+  const variantAvailableSizes =
+    selectedVariant?.kichThuoc
+      ?.filter((s) => s.stock > 0)
+      .map((s) => s.size) || [];
+
+  const mappedSizes = product.colorSizeMap?.[selectedColor] || [];
+
+  const availableSizes =
+    variantAvailableSizes.length > 0
+      ? variantAvailableSizes
+      : mappedSizes.length > 0
+      ? mappedSizes
+      : product.kichCo || [];
+
+  const uniqueAvailableSizes = Array.from(new Set(availableSizes));
+
+  const selectedSizeInfo =
+    selectedVariant?.kichThuoc?.find((s) => s.size === selectedSize) ||
+    selectedVariant?.kichThuoc?.find((s) => s.stock > 0) ||
+    selectedVariant?.kichThuoc?.[0];
+
+  const galleryImagesRaw =
+    selectedVariant?.hinhAnh?.length
+      ? selectedVariant.hinhAnh
+      : product.hinhAnhList?.length
+      ? product.hinhAnhList
+      : product.hinhAnh
+      ? [product.hinhAnh]
+      : ['/placeholder.svg'];
+
+  const galleryImages = Array.from(
+    new Set(galleryImagesRaw.filter((img): img is string => Boolean(img)))
+  );
+
+  const displayImage =
+    galleryImages.includes(selectedImage)
+      ? selectedImage
+      : galleryImages[0] || '/placeholder.svg';
+
+  const displayPrice = selectedSizeInfo?.finalPrice ?? product.gia;
+
+  const displayOriginalPrice =
+    typeof selectedSizeInfo?.price === 'number' &&
+    displayPrice < selectedSizeInfo.price
+      ? selectedSizeInfo.price
+      : product.giaGoc;
+
+  const displayStock = selectedSizeInfo?.stock ?? product.soLuongTon ?? 0;
+
+  const discount =
+    typeof displayOriginalPrice === 'number' &&
+    displayOriginalPrice > displayPrice
+      ? getDiscountPercent(displayOriginalPrice, displayPrice)
+      : null;
+
+  const canAddToCart = Boolean(displayStock > 0 && selectedSize && selectedVariant?.id);
 
   return (
     <MainLayout>
       <div className="container mx-auto px-4 py-6">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-6">
-          <Link to="/" className="hover:text-foreground">Trang chủ</Link>
+        <nav className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link to="/" className="hover:text-foreground">
+            Trang chủ
+          </Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <Link to="/san-pham" className="hover:text-foreground">Sản phẩm</Link>
+          <Link to="/san-pham" className="hover:text-foreground">
+            Sản phẩm
+          </Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-foreground font-medium">{product.ten}</span>
+          <span className="font-medium text-foreground">{product.ten}</span>
         </nav>
 
-        <div className="grid lg:grid-cols-2 gap-8 mb-16">
-          {/* Images */}
+        <div className="mb-16 grid gap-8 lg:grid-cols-2">
           <div className="space-y-3">
-            <div className="aspect-square rounded-xl bg-secondary overflow-hidden">
-              <img src={product.hinhAnh[0]} alt={product.ten} className="h-full w-full object-cover" />
+            <div className="aspect-square overflow-hidden rounded-xl bg-secondary">
+              <img
+                src={displayImage}
+                alt={product.ten}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = '/placeholder.svg';
+                }}
+              />
             </div>
+
             <div className="grid grid-cols-4 gap-2">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className="aspect-square rounded-lg bg-secondary overflow-hidden border-2 border-transparent hover:border-accent cursor-pointer transition-colors">
-                  <img src={product.hinhAnh[0]} alt="" className="h-full w-full object-cover" />
-                </div>
+              {galleryImages.map((img, i) => (
+                <button
+                  key={`${img}-${i}`}
+                  type="button"
+                  onClick={() => setSelectedImage(img)}
+                  className={`aspect-square overflow-hidden rounded-lg border-2 bg-secondary transition-colors ${
+                    displayImage === img
+                      ? 'border-accent'
+                      : 'border-transparent hover:border-accent'
+                  }`}
+                >
+                  <img
+                    src={img}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = '/placeholder.svg';
+                    }}
+                  />
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Info */}
           <div className="space-y-5">
-            {product.badge && <Badge variant={product.badge === 'sale' ? 'destructive' : 'default'}>{product.badge === 'sale' ? 'Sale' : product.badge === 'bestseller' ? 'Bán chạy' : product.badge === 'moi' ? 'Mới' : 'Hot'}</Badge>}
-            <h1 className="text-2xl md:text-3xl font-bold">{product.ten}</h1>
+            {product.badge && (
+              <Badge variant={product.badge === 'sale' ? 'destructive' : 'default'}>
+                {product.badge === 'sale'
+                  ? 'Sale'
+                  : product.badge === 'bestseller'
+                  ? 'Bán chạy'
+                  : product.badge === 'moi'
+                  ? 'Mới'
+                  : 'Hot'}
+              </Badge>
+            )}
+
+            <h1 className="text-2xl font-bold md:text-3xl">{product.ten}</h1>
 
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1">
-                {Array.from({ length: 5 }).map((_, i) => <Star key={i} className={`h-4 w-4 ${i < Math.round(product.danhGiaTB) ? 'fill-warning text-warning' : 'text-border'}`} />)}
-                <span className="text-sm text-muted-foreground ml-1">{product.danhGiaTB} ({product.soDanhGia} đánh giá)</span>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star
+                    key={i}
+                    className={`h-4 w-4 ${
+                      i < Math.round(product.danhGia || 0)
+                        ? 'fill-warning text-warning'
+                        : 'text-border'
+                    }`}
+                  />
+                ))}
+                <span className="ml-1 text-sm text-muted-foreground">
+                  {product.danhGia || 0} ({product.soLuongDanhGia || 0} đánh giá)
+                </span>
               </div>
-              <span className="text-sm text-muted-foreground">Đã bán {product.daBan.toLocaleString()}</span>
+
+              <span className="text-sm text-muted-foreground">
+                Đã bán {(product.daBan || 0).toLocaleString()}
+              </span>
             </div>
 
             <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold text-foreground">{formatPrice(product.gia)}</span>
-              {product.giaGoc && (
-                <>
-                  <span className="text-lg text-muted-foreground line-through">{formatPrice(product.giaGoc)}</span>
-                  <Badge variant="destructive">-{getDiscountPercent(product.giaGoc, product.gia)}%</Badge>
-                </>
-              )}
+              <span className="text-3xl font-bold text-foreground">
+                {formatPrice(displayPrice)}
+              </span>
+
+              {typeof displayOriginalPrice === 'number' &&
+                displayOriginalPrice > displayPrice && (
+                  <>
+                    <span className="text-lg text-muted-foreground line-through">
+                      {formatPrice(displayOriginalPrice)}
+                    </span>
+                    {discount && <Badge variant="destructive">-{discount}%</Badge>}
+                  </>
+                )}
             </div>
 
             <p className="text-muted-foreground">{product.moTa}</p>
 
-            {/* Color */}
             <div>
-              <p className="text-sm font-medium mb-2">Màu sắc: <span className="text-accent">{selectedColor}</span></p>
+              <p className="mb-2 text-sm font-medium">
+                Màu sắc: <span className="text-accent">{selectedColor}</span>
+              </p>
               <div className="flex gap-2">
-                {product.mauSac.map(m => (
-                  <button key={m.ma} onClick={() => setSelectedColor(m.ten)}
-                    className={`h-9 w-9 rounded-full border-2 transition-all ${selectedColor === m.ten ? 'border-accent scale-110' : 'border-border'}`}
-                    style={{ backgroundColor: m.ma }} title={m.ten} />
+                {product.mauSac?.map((m) => (
+                  <button
+                    key={`${m.ten}-${m.ma}`}
+                    type="button"
+                    onClick={() => {
+                      const variant = product.bienThe?.find((v) => v.mau === m.ten);
+
+                      const nextAvailableSizes =
+                        variant?.kichThuoc
+                          ?.filter((s) => s.stock > 0)
+                          .map((s) => s.size) ||
+                        product.colorSizeMap?.[m.ten] ||
+                        product.kichCo ||
+                        [];
+
+                      const nextImages =
+                        variant?.hinhAnh?.length
+                          ? variant.hinhAnh
+                          : product.hinhAnhList?.length
+                          ? product.hinhAnhList
+                          : product.hinhAnh
+                          ? [product.hinhAnh]
+                          : ['/placeholder.svg'];
+
+                      setSelectedColor(m.ten);
+                      setSelectedSize(nextAvailableSizes[0] || '');
+                      setSelectedImage(nextImages[0] || '/placeholder.svg');
+                      setQuantity(1);
+                    }}
+                    className={`h-9 w-9 rounded-full border-2 transition-all ${
+                      selectedColor === m.ten
+                        ? 'scale-110 border-accent'
+                        : 'border-border'
+                    }`}
+                    style={{ backgroundColor: m.ma }}
+                    title={m.ten}
+                  />
                 ))}
               </div>
             </div>
 
-            {/* Size */}
             <div>
-              <p className="text-sm font-medium mb-2">Kích cỡ: <span className="text-accent">{selectedSize}</span></p>
+              <p className="mb-2 text-sm font-medium">
+                Kích cỡ: <span className="text-accent">{selectedSize}</span>
+              </p>
               <div className="flex flex-wrap gap-2">
-                {product.kichCo.map(s => (
-                  <button key={s} onClick={() => setSelectedSize(s)}
-                    className={`h-9 min-w-[2.5rem] rounded-lg border px-3 text-sm font-medium transition-all ${selectedSize === s ? 'border-accent bg-accent text-accent-foreground' : 'border-border hover:border-accent/50'}`}>{s}</button>
+                {uniqueAvailableSizes.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSize(s);
+                      setQuantity(1);
+                    }}
+                    className={`h-9 min-w-[2.5rem] rounded-lg border px-3 text-sm font-medium transition-all ${
+                      selectedSize === s
+                        ? 'border-accent bg-accent text-accent-foreground'
+                        : 'border-border hover:border-accent/50'
+                    }`}
+                  >
+                    {s}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Quantity */}
             <div>
-              <p className="text-sm font-medium mb-2">Số lượng</p>
+              <p className="mb-2 text-sm font-medium">Số lượng</p>
               <div className="flex items-center gap-3">
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setQuantity(q => Math.max(1, q - 1))}><Minus className="h-4 w-4" /></Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+
                 <span className="w-10 text-center font-medium">{quantity}</span>
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setQuantity(q => q + 1)}><Plus className="h-4 w-4" /></Button>
-                <span className="text-sm text-muted-foreground">Còn {product.soLuongTon} sản phẩm</span>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() =>
+                    setQuantity((q) =>
+                      Math.min(displayStock > 0 ? displayStock : 1, q + 1)
+                    )
+                  }
+                  disabled={displayStock <= 0}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+
+                <span className="text-sm text-muted-foreground">
+                  Còn {displayStock || 0} sản phẩm
+                </span>
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3 pt-2">
-              <Button size="lg" className="flex-1 gap-2" onClick={() => addItem(product, selectedColor, selectedSize, quantity)}>
+              <Button
+                type="button"
+                size="lg"
+                className="flex-1 gap-2"
+                disabled={!canAddToCart}
+                onClick={() => {
+                  if (!selectedVariant?.id) return;
+
+                  addItem(
+                    {
+                      ...product,
+                      hinhAnh: displayImage,
+                      gia: displayPrice,
+                    },
+                    selectedColor,
+                    selectedSize,
+                    quantity,
+                    {
+                      variantId: selectedVariant.id,
+                      price: displayPrice,
+                      image: displayImage,
+                    }
+                  );
+                }}
+              >
                 <ShoppingBag className="h-5 w-5" /> Thêm vào giỏ
               </Button>
-              <Button size="lg" variant="secondary" className="flex-1">Mua ngay</Button>
-              <Button size="lg" variant="outline" className="px-3" onClick={() => isInWishlist(product.id) ? removeWishlist(product.id) : addWishlist(product)}>
-                <Heart className={`h-5 w-5 ${isInWishlist(product.id) ? 'fill-sale text-sale' : ''}`} />
+
+              <Button
+                type="button"
+                size="lg"
+                variant="secondary"
+                className="flex-1"
+                disabled={!canAddToCart}
+              >
+                Mua ngay
+              </Button>
+
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                className="px-3"
+                onClick={() =>
+                  isInWishlist(product.id)
+                    ? removeWishlist(product.id)
+                    : addWishlist(product)
+                }
+              >
+                <Heart
+                  className={`h-5 w-5 ${
+                    isInWishlist(product.id) ? 'fill-sale text-sale' : ''
+                  }`}
+                />
               </Button>
             </div>
 
-            {/* AI Buttons */}
-            <div className="border border-accent/20 rounded-xl p-4 bg-accent/5">
-              <p className="text-sm font-medium mb-3 flex items-center gap-2"><Bot className="h-4 w-4 text-accent" /> Trợ lý AI hỗ trợ bạn</p>
+            <div className="rounded-xl border border-accent/20 bg-accent/5 p-4">
+              <p className="mb-3 flex items-center gap-2 text-sm font-medium">
+                <Bot className="h-4 w-4 text-accent" /> Trợ lý AI hỗ trợ bạn
+              </p>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild><Link to="/ai-tu-van"><Bot className="h-3.5 w-3.5" /> AI tư vấn size</Link></Button>
-                <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild><Link to="/ai-tu-van"><Bot className="h-3.5 w-3.5" /> AI gợi ý phối đồ</Link></Button>
-                <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild><Link to="/ai-tu-van"><Bot className="h-3.5 w-3.5" /> Sản phẩm tương tự</Link></Button>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
+                  <Link to="/ai-tu-van">
+                    <Bot className="h-3.5 w-3.5" /> AI tư vấn size
+                  </Link>
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
+                  <Link to="/ai-tu-van">
+                    <Bot className="h-3.5 w-3.5" /> AI gợi ý phối đồ
+                  </Link>
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
+                  <Link to="/ai-tu-van">
+                    <Bot className="h-3.5 w-3.5" /> Sản phẩm tương tự
+                  </Link>
+                </Button>
               </div>
             </div>
 
-            {/* Policies */}
             <div className="grid grid-cols-3 gap-3">
               {[
                 { icon: Truck, label: 'Miễn phí ship đơn 500K' },
                 { icon: RotateCcw, label: 'Đổi trả 30 ngày' },
                 { icon: Shield, label: 'Bảo hành chất lượng' },
-              ].map(p => (
-                <div key={p.label} className="flex flex-col items-center gap-1.5 rounded-lg border border-border p-3 text-center">
+              ].map((p) => (
+                <div
+                  key={p.label}
+                  className="flex flex-col items-center gap-1.5 rounded-lg border border-border p-3 text-center"
+                >
                   <p.icon className="h-5 w-5 text-accent" />
                   <span className="text-[11px] text-muted-foreground">{p.label}</span>
                 </div>
@@ -164,56 +535,24 @@ export default function ProductDetail() {
           </div>
         </div>
 
-        {/* Description */}
         <div className="mb-12">
-          <h2 className="text-xl font-bold mb-4">Mô tả sản phẩm</h2>
+          <h2 className="mb-4 text-xl font-bold">Mô tả sản phẩm</h2>
           <div className="prose prose-sm max-w-none text-muted-foreground">
-            <p>{product.moTaChiTiet}</p>
+            <p>{product.moTaChiTiet || product.moTa}</p>
             <ul className="mt-3">
-              <li>Chất liệu: {product.chatLieu}</li>
-              <li>Giới tính: {product.gioiTinh === 'nam' ? 'Nam' : product.gioiTinh === 'nu' ? 'Nữ' : 'Unisex'}</li>
+              <li>Chất liệu: {product.chatLieu || 'Đang cập nhật'}</li>
+              <li>
+                Giới tính:{' '}
+                {product.gioiTinh === 'nam'
+                  ? 'Nam'
+                  : product.gioiTinh === 'nu'
+                  ? 'Nữ'
+                  : 'Unisex'}
+              </li>
               <li>Danh mục: {product.danhMuc}</li>
             </ul>
           </div>
         </div>
-
-        {/* Reviews */}
-        <div className="mb-12">
-          <h2 className="text-xl font-bold mb-6">Đánh giá ({reviews.length})</h2>
-          {reviews.length === 0 ? (
-            <p className="text-muted-foreground">Chưa có đánh giá nào cho sản phẩm này.</p>
-          ) : (
-            <div className="space-y-4">
-              {reviews.map(r => (
-                <div key={r.id} className="rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-sm font-medium">{r.khachHangTen[0]}</div>
-                    <div>
-                      <p className="text-sm font-medium">{r.khachHangTen}</p>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: 5 }).map((_, i) => <Star key={i} className={`h-3 w-3 ${i < r.soSao ? 'fill-warning text-warning' : 'text-border'}`} />)}
-                        <span className="text-xs text-muted-foreground ml-1">{formatDate(r.ngayDanhGia)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{r.noiDung}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Related */}
-        {related.length > 0 && (
-          <div>
-            <h2 className="text-xl font-bold mb-6">Sản phẩm liên quan</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {related.map(p => (
-                <ProductCard key={p.id} product={p} onAddToCart={pr => addItem(pr, pr.mauSac[0]?.ten || '', pr.kichCo[0] || '')} onToggleWishlist={pr => isInWishlist(pr.id) ? removeWishlist(pr.id) : addWishlist(pr)} isWishlisted={isInWishlist(p.id)} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </MainLayout>
   );

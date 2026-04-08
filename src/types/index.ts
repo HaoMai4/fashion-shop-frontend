@@ -1,33 +1,53 @@
 // Types matching MySQL entities for future backend integration
 
 export interface SanPham {
-  id: number;
+  id: string;
   ten: string;
   slug: string;
   moTa: string;
-  moTaChiTiet: string;
+  moTaChiTiet?: string;
   gia: number;
   giaGoc?: number;
-  hinhAnh: string[];
-  danhMucId: number;
+  hinhAnh: string;
   danhMuc: string;
-  gioiTinh: 'nam' | 'nu' | 'unisex';
-  chatLieu: string;
-  mauSac: MauSac[];
-  kichCo: string[];
-  badge?: 'sale' | 'bestseller' | 'moi' | 'hot';
-  daBan: number;
-  conHang: boolean;
-  soLuongTon: number;
-  danhGiaTB: number;
-  soDanhGia: number;
-  ngayTao: string;
+  danhMucId: string;
+  gioiTinh: "nam" | "nu" | "unisex";
+  thuongHieu?: string;
   tags: string[];
+  daBan: number;
+  ngayTao: string;
+  mauSac: { ten: string; ma: string }[];
+  kichCo: string[];
+  badge?: string;
+  danhGia: number;
+  soLuongDanhGia: number;
+  chatLieu?: string;
+  donHang?: number;
+  soLuongTon?: number;
+  bienThe?: BienTheSanPhamDetail[];
+  colorSizeMap?: Record<string, string[]>;
+  hinhAnhList?: string[];
 }
 
 export interface MauSac {
   ten: string;
-  ma: string; // hex code
+  ma: string;
+}
+
+export interface KichThuocBienTheDetail {
+  size: string;
+  price: number;
+  discountPrice?: number;
+  finalPrice: number;
+  stock: number;
+}
+
+export interface BienTheSanPhamDetail {
+  id: string;
+  mau: string;
+  maMau: string;
+  hinhAnh: string[];
+  kichThuoc: KichThuocBienTheDetail[];
 }
 
 export interface BienTheSanPham {
@@ -69,11 +89,14 @@ export interface GioHang {
 
 export interface ChiTietGioHang {
   id: number;
+  productId: string;
+  variantId: string;
   sanPham: SanPham;
   mauSac: string;
   kichCo: string;
   soLuong: number;
   gia: number;
+  hinhAnh?: string;
 }
 
 export interface DonHang {
@@ -129,7 +152,6 @@ export interface YeuThich {
   ngayThem: string;
 }
 
-// Chatbot types
 export interface ChatMessage {
   id: string;
   role: 'user' | 'bot';
@@ -158,7 +180,6 @@ export interface ChatResponse {
   type?: 'text' | 'product_recommendation' | 'faq' | 'size_advice';
 }
 
-// Filter types
 export interface ProductFilter {
   danhMuc?: string;
   gioiTinh?: string;

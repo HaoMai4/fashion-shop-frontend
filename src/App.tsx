@@ -13,6 +13,8 @@ import RegisterPage from "./pages/RegisterPage";
 import AccountPage from "./pages/AccountPage";
 import WishlistPage from "./pages/WishlistPage";
 import OrderHistory from "./pages/OrderHistory";
+import TraCuuDonHangSearchPage from "./pages/TraCuuDonHangSearchPage";
+import TraCuuDonHangPage from "./pages/TraCuuDonHangPage";
 import AIConsultant from "./pages/AIConsultant";
 import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
@@ -36,6 +38,8 @@ const App = () => (
           <Route path="/tai-khoan" element={<AccountPage />} />
           <Route path="/yeu-thich" element={<WishlistPage />} />
           <Route path="/don-hang" element={<OrderHistory />} />
+          <Route path="/tra-cuu-don-hang" element={<TraCuuDonHangSearchPage />} />
+          <Route path="/tra-cuu-don-hang/:orderCode" element={<TraCuuDonHangPage />} />
           <Route path="/ai-tu-van" element={<AIConsultant />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="*" element={<NotFound />} />
