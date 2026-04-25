@@ -13,11 +13,16 @@ import RegisterPage from "./pages/RegisterPage";
 import AccountPage from "./pages/AccountPage";
 import WishlistPage from "./pages/WishlistPage";
 import OrderHistory from "./pages/OrderHistory";
+import OrderDetailPage from "./pages/OrderDetailPage";
 import TraCuuDonHangSearchPage from "./pages/TraCuuDonHangSearchPage";
 import TraCuuDonHangPage from "./pages/TraCuuDonHangPage";
 import AIConsultant from "./pages/AIConsultant";
 import AdminPage from "./pages/AdminPage";
+import AdminOrdersPage from "./pages/admin/AdminOrdersPage";
+import AdminOrderReportsPage from "./pages/admin/AdminOrderReportsPage";
+import AdminProductsPage from "./pages/admin/AdminProductsPage";
 import NotFound from "./pages/NotFound";
+import AdminStatsPage from "./pages/admin/AdminStatsPage";
 
 const queryClient = new QueryClient();
 
@@ -38,11 +43,16 @@ const App = () => (
           <Route path="/tai-khoan" element={<AccountPage />} />
           <Route path="/yeu-thich" element={<WishlistPage />} />
           <Route path="/don-hang" element={<OrderHistory />} />
+          <Route path="/don-hang/:orderCode" element={<OrderDetailPage />} />
           <Route path="/tra-cuu-don-hang" element={<TraCuuDonHangSearchPage />} />
           <Route path="/tra-cuu-don-hang/:orderCode" element={<TraCuuDonHangPage />} />
           <Route path="/ai-tu-van" element={<AIConsultant />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/orders" element={<AdminOrdersPage />} />
+          <Route path="/admin/order-reports" element={<AdminOrderReportsPage />} />
+          <Route path="/admin/products" element={<AdminProductsPage />} />
           <Route path="*" element={<NotFound />} />
+          <Route path="/admin/stats" element={<AdminStatsPage />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

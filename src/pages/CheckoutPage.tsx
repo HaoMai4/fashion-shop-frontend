@@ -1,5 +1,5 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import { orderService, type CreateOrderPayload } from '@/services/api/orderService';
 import type { ChiTietGioHang } from '@/types';
 
+const BUY_NOW_STORAGE_KEY = 'matewear_buy_now';
+
 type CheckoutForm = {
   hoTen: string;
   sdt: string;
@@ -20,8 +22,28 @@ type CheckoutForm = {
   ghiChu: string;
 };
 
+type BuyNowItem = {
+  id: string;
+  productId: string;
+  productSlug?: string;
+  variantId: string;
+  kichCo: string;
+  soLuong: number;
+  gia: number;
+  mauSac: string;
+  hinhAnh?: string;
+  sanPham: {
+    id: string;
+    ten: string;
+    hinhAnh?: string;
+  };
+};
+
+type CheckoutDisplayItem = ChiTietGioHang | BuyNowItem;
+
 export default function CheckoutPage() {
-  const { items, tongTien, clearCart } = useCart();
+  const location = useLocation();
+  const { items, clearCart } = useCart();
 
   const [step, setStep] = useState<'form' | 'success'>('form');
   const [shipping, setShipping] = useState<'standard' | 'express'>('standard');
@@ -35,12 +57,44 @@ export default function CheckoutPage() {
     ghiChu: '',
   });
 
+  const mode = useMemo(() => {
+    const queryMode = new URLSearchParams(location.search).get('mode');
+    return queryMode === 'buy-now' ? 'buy-now' : 'cart';
+  }, [location.search]);
+
+  const buyNowItem = useMemo<BuyNowItem | null>(() => {
+    if (mode !== 'buy-now' || typeof window === 'undefined') return null;
+
+    try {
+      const raw = localStorage.getItem(BUY_NOW_STORAGE_KEY);
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw);
+
+      if (!parsed?.productId || !parsed?.variantId || !parsed?.kichCo) {
+        return null;
+      }
+
+      return parsed as BuyNowItem;
+    } catch (error) {
+      console.error('load buy now item error:', error);
+      return null;
+    }
+  }, [mode]);
+
+  const checkoutItems: CheckoutDisplayItem[] =
+    mode === 'buy-now' ? (buyNowItem ? [buyNowItem] : []) : items;
+
+  const subtotal = useMemo(() => {
+    return checkoutItems.reduce((sum, item) => sum + item.gia * item.soLuong, 0);
+  }, [checkoutItems]);
+
   const shippingFee = useMemo(() => {
     if (shipping === 'express') return 50000;
-    return tongTien >= 500000 ? 0 : 30000;
-  }, [shipping, tongTien]);
+    return subtotal >= 500000 ? 0 : 30000;
+  }, [shipping, subtotal]);
 
-  const finalTotal = tongTien + shippingFee;
+  const finalTotal = subtotal + shippingFee;
 
   const handleChange =
     (field: keyof CheckoutForm) => (e: ChangeEvent<HTMLInputElement>) => {
@@ -50,8 +104,16 @@ export default function CheckoutPage() {
       }));
     };
 
-  const getImage = (item: ChiTietGioHang) =>
+  const getImage = (item: CheckoutDisplayItem) =>
     item.hinhAnh || item.sanPham.hinhAnh || '/placeholder.svg';
+
+  const backHref =
+    mode === 'buy-now' && buyNowItem?.productSlug
+      ? `/san-pham/${buyNowItem.productSlug}`
+      : '/gio-hang';
+
+  const backLabel =
+    mode === 'buy-now' ? 'Quay lại sản phẩm' : 'Quay lại giỏ hàng';
 
   const validateForm = () => {
     const hoTen = form.hoTen.trim();
@@ -89,12 +151,14 @@ export default function CheckoutPage() {
       return false;
     }
 
-    if (items.length === 0) {
-      toast.error('Giỏ hàng đang trống');
+    if (checkoutItems.length === 0) {
+      toast.error(
+        mode === 'buy-now' ? 'Không có sản phẩm mua ngay' : 'Giỏ hàng đang trống'
+      );
       return false;
     }
 
-    const invalidItem = items.find(
+    const invalidItem = checkoutItems.find(
       (item) =>
         !item.productId ||
         !item.variantId ||
@@ -103,7 +167,7 @@ export default function CheckoutPage() {
     );
 
     if (invalidItem) {
-      toast.error('Có sản phẩm trong giỏ chưa đủ dữ liệu biến thể');
+      toast.error('Có sản phẩm chưa đủ dữ liệu biến thể');
       return false;
     }
 
@@ -120,7 +184,7 @@ export default function CheckoutPage() {
       setIsSubmitting(true);
 
       const payload: CreateOrderPayload & { shippingFee: number } = {
-        items: items.map((item) => ({
+        items: checkoutItems.map((item) => ({
           productId: item.productId,
           variantId: item.variantId,
           size: item.kichCo,
@@ -152,7 +216,12 @@ export default function CheckoutPage() {
         throw new Error('Backend không trả về thông tin đơn hàng');
       }
 
-      clearCart();
+      if (mode === 'cart') {
+        clearCart();
+      }
+
+      localStorage.removeItem(BUY_NOW_STORAGE_KEY);
+
       setOrderCode(createdOrder.orderCode || createdOrder._id || '');
       setStep('success');
       toast.success('Đặt hàng thành công');
@@ -193,11 +262,13 @@ export default function CheckoutPage() {
     );
   }
 
-  if (items.length === 0) {
+  if (checkoutItems.length === 0) {
     return (
       <MainLayout>
         <div className="container mx-auto px-4 py-20 text-center">
-          <p className="mb-4 text-lg font-medium">Giỏ hàng trống</p>
+          <p className="mb-4 text-lg font-medium">
+            {mode === 'buy-now' ? 'Không có sản phẩm mua ngay' : 'Giỏ hàng trống'}
+          </p>
           <Button asChild>
             <Link to="/san-pham">Mua sắm ngay</Link>
           </Button>
@@ -210,11 +281,11 @@ export default function CheckoutPage() {
     <MainLayout>
       <div className="container mx-auto max-w-4xl px-4 py-6">
         <Link
-          to="/gio-hang"
+          to={backHref}
           className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          Quay lại giỏ hàng
+          {backLabel}
         </Link>
 
         <h1 className="mb-8 text-2xl font-bold">Thanh toán</h1>
@@ -298,7 +369,7 @@ export default function CheckoutPage() {
                     </div>
                   </div>
                   <span className="text-sm font-medium">
-                    {tongTien >= 500000 ? 'Miễn phí' : '30.000₫'}
+                    {subtotal >= 500000 ? 'Miễn phí' : '30.000₫'}
                   </span>
                 </label>
 
@@ -338,10 +409,12 @@ export default function CheckoutPage() {
 
           <div className="lg:col-span-2">
             <div className="sticky top-20 space-y-4 rounded-xl border border-border p-5">
-              <h2 className="font-semibold">Đơn hàng ({items.length} sản phẩm)</h2>
+              <h2 className="font-semibold">
+                Đơn hàng ({checkoutItems.length} sản phẩm)
+              </h2>
 
               <div className="max-h-60 space-y-3 overflow-y-auto">
-                {items.map((item) => (
+                {checkoutItems.map((item) => (
                   <div key={item.id} className="flex gap-3">
                     <img
                       src={getImage(item)}
@@ -366,7 +439,7 @@ export default function CheckoutPage() {
               <div className="space-y-2 border-t border-border pt-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tạm tính</span>
-                  <span>{formatPrice(tongTien)}</span>
+                  <span>{formatPrice(subtotal)}</span>
                 </div>
 
                 <div className="flex justify-between">

@@ -57,12 +57,100 @@ export const orderService = {
     if (params?.sortBy) qs.set("sortBy", params.sortBy);
     if (params?.sortOrder) qs.set("sortOrder", params.sortOrder);
 
-    return apiRequest(`/api/orders?${qs.toString()}`, {
+    const queryString = qs.toString();
+
+    return apiRequest(`/api/orders${queryString ? `?${queryString}` : ""}`, {
+      auth: true,
+    });
+  },
+
+  async getMyOrderDetail(orderCode: string) {
+    return apiRequest(`/api/orders/my-orders/${encodeURIComponent(orderCode)}`, {
       auth: true,
     });
   },
 
   async getOrderByCode(orderCode: string) {
-    return apiRequest(`/api/orders/code/${orderCode}`);
+    return apiRequest(`/api/orders/code/${encodeURIComponent(orderCode)}`);
+  },
+
+  async requestOrderCancellation(
+    orderId: string,
+    payload: {
+      reason: string;
+    }
+  ) {
+    return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/report`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      auth: true,
+    });
+  },
+
+  async getAdminOrders(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+    export?: "csv";
+    countsOnly?: boolean;
+  }) {
+    const qs = new URLSearchParams();
+
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.status) qs.set("status", params.status);
+    if (params?.sortBy) qs.set("sortBy", params.sortBy);
+    if (params?.sortOrder) qs.set("sortOrder", params.sortOrder);
+    if (params?.export) qs.set("export", params.export);
+    if (params?.countsOnly) qs.set("countsOnly", "true");
+
+    const queryString = qs.toString();
+
+    return apiRequest(`/api/orders/admin${queryString ? `?${queryString}` : ""}`, {
+      auth: true,
+    });
+  },
+
+  async updateOrderStatus(
+    orderId: string,
+    payload: {
+      orderStatus?: "pending" | "confirmed" | "shipped" | "delivered" | "cancelled" | "completed";
+      paymentStatus?: "pending" | "paid" | "failed" | "cancelled";
+    }
+  ) {
+    return apiRequest(`/api/orders/admin/${encodeURIComponent(orderId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      auth: true,
+    });
+  },
+
+  async getAdminOrderReports(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    orderId?: string;
+  }) {
+    const qs = new URLSearchParams();
+
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.status) qs.set("status", params.status);
+    if (params?.orderId) qs.set("orderId", params.orderId);
+
+    const queryString = qs.toString();
+
+    return apiRequest(`/api/orders/admin/reports${queryString ? `?${queryString}` : ""}`, {
+      auth: true,
+    });
+  },
+
+  async approveOrderReport(reportId: string) {
+    return apiRequest(`/api/orders/admin/reports/${encodeURIComponent(reportId)}/approve`, {
+      method: "PATCH",
+      auth: true,
+    });
   },
 };

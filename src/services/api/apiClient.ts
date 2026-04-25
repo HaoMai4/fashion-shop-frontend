@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8686";
+const TOKEN_KEY = "stylehub_token";
 
 type RequestOptions = RequestInit & {
   auth?: boolean;
@@ -13,7 +14,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   };
 
   if (auth) {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem(TOKEN_KEY);
     if (token) {
       finalHeaders.Authorization = `Bearer ${token}`;
     }

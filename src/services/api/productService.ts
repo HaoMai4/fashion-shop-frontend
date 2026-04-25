@@ -1,6 +1,10 @@
 import { apiRequest } from "./apiClient";
 import { SanPham, ProductFilter } from "@/types";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8686";
+const TOKEN_KEY = "stylehub_token";
+const LEGACY_TOKEN_KEY = "token";
+
 type BackendProduct = {
   _id: string;
   name: string;
@@ -29,6 +33,64 @@ type BackendProduct = {
     colorCode: string;
     images?: string[];
   }>;
+};
+
+export type AdminCategoryRecord = {
+  _id: string;
+  name: string;
+  slug: string;
+  path?: string;
+};
+
+export type AdminVariantSizeRecord = {
+  _id?: string;
+  size?: string;
+  price?: number;
+  discountPrice?: number;
+  stock?: number;
+};
+
+export type AdminVariantRecord = {
+  _id?: string;
+  color?: string;
+  colorCode?: string;
+  images?: string[];
+  sizes?: AdminVariantSizeRecord[];
+};
+
+export type AdminProductRecord = {
+  _id: string;
+  name: string;
+  slug: string;
+  shortDescription?: string;
+  brand?: string;
+  tags?: string[];
+  categoryId?: string | { _id?: string; name?: string; slug?: string };
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  variants?: AdminVariantRecord[];
+  defaultVariant?: AdminVariantRecord | null;
+  variantsCount?: number;
+};
+
+export type AdminVariantSizePayload = {
+  size: string;
+  price: number;
+  discountPrice?: number;
+  stock: number;
+};
+
+export type UpdateAdminVariantPayload = {
+  color?: string;
+  colorCode?: string;
+  images?: File[];
+  action?: "merge" | "replace";
+};
+
+type ProductColorOption = {
+  ten: string;
+  ma: string;
 };
 
 function inferGenderFromSlug(slug?: string): "nam" | "nu" | "unisex" {
@@ -68,18 +130,18 @@ function mapBackendProductToSanPham(p: any): SanPham {
     defaultSize?.originalPrice ??
     (typeof p.price === "number" && currentPrice < p.price ? p.price : undefined);
 
-  const colors =
-    p.colorVariants?.map((v: any) => ({
+  const colors: ProductColorOption[] =
+    p.colorVariants?.map((v: any): ProductColorOption => ({
       ten: v.color,
       ma: v.colorCode,
     })) ||
     (defaultVariant
       ? [
-          {
-            ten: defaultVariant.color || "",
-            ma: defaultVariant.colorCode || "#000000",
-          },
-        ]
+        {
+          ten: defaultVariant.color || "",
+          ma: defaultVariant.colorCode || "#000000",
+        },
+      ]
       : []);
 
   const sizes =
@@ -128,17 +190,14 @@ function mapProductDetailToSanPham(p: any): SanPham {
     defaultVariant?.sizes?.[0] ||
     null;
 
-  const image =
-    defaultVariant?.images?.[0] ||
-    p.images?.[0] ||
-    "/placeholder.svg";
+  const image = defaultVariant?.images?.[0] || p.images?.[0] || "/placeholder.svg";
 
   const imageList =
     Array.isArray(defaultVariant?.images) && defaultVariant.images.length > 0
       ? defaultVariant.images
       : Array.isArray(p.images) && p.images.length > 0
-      ? p.images
-      : ["/placeholder.svg"];
+        ? p.images
+        : ["/placeholder.svg"];
 
   const currentPrice =
     p.minPrice ??
@@ -152,15 +211,23 @@ function mapProductDetailToSanPham(p: any): SanPham {
       ? defaultSize.price
       : undefined;
 
-  const colors = variants
-    .map((v: any) => ({
-      ten: v.color || "",
-      ma: v.colorCode || "#000000",
-    }))
-    .filter((c: any) => c.ten);
+  const colors: ProductColorOption[] = variants
+    .map((v: any): ProductColorOption | null => {
+      const ten = typeof v.color === "string" ? v.color.trim() : "";
+      if (!ten) return null;
 
-  const uniqueColors = Array.from(
-    new Map(colors.map((c: any) => [c.ten, c])).values()
+      return {
+        ten,
+        ma:
+          typeof v.colorCode === "string" && v.colorCode.trim()
+            ? v.colorCode
+            : "#000000",
+      };
+    })
+    .filter((c): c is ProductColorOption => c !== null);
+
+  const uniqueColors: ProductColorOption[] = Array.from(
+    new Map<string, ProductColorOption>(colors.map((c) => [c.ten, c])).values()
   );
 
   const sizes =
@@ -201,17 +268,17 @@ function mapProductDetailToSanPham(p: any): SanPham {
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => ({
-            size: s.size,
-            price: s.price,
-            discountPrice: s.discountPrice,
-            finalPrice:
-              typeof s.finalPrice === "number"
-                ? s.finalPrice
-                : s.discountPrice && s.discountPrice > 0
+          size: s.size,
+          price: s.price,
+          discountPrice: s.discountPrice,
+          finalPrice:
+            typeof s.finalPrice === "number"
+              ? s.finalPrice
+              : s.discountPrice && s.discountPrice > 0
                 ? s.discountPrice
                 : s.price,
-            stock: s.stock || 0,
-          }))
+          stock: s.stock || 0,
+        }))
         : [],
     })),
 
@@ -258,6 +325,53 @@ function buildSearchQuery(filter?: ProductFilter) {
   return params.toString();
 }
 
+async function apiFormRequest(path: string, formData: FormData, method = "POST") {
+  const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers,
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.message || "API request failed");
+  }
+
+  return data;
+}
+
+function buildVariantFormData(payload: UpdateAdminVariantPayload) {
+  const formData = new FormData();
+
+  if (typeof payload.color === "string") {
+    formData.append("color", payload.color);
+  }
+
+  if (typeof payload.colorCode === "string") {
+    formData.append("colorCode", payload.colorCode);
+  }
+
+  if (typeof payload.action === "string") {
+    formData.append("action", payload.action);
+  }
+
+  if (Array.isArray(payload.images) && payload.images.length > 0) {
+    payload.images.forEach((file) => {
+      formData.append("images", file);
+    });
+  }
+
+  return formData;
+}
+
 export const productService = {
   async getAll(filter?: ProductFilter): Promise<SanPham[]> {
     if (filter?.timKiem) {
@@ -268,7 +382,9 @@ export const productService = {
 
     if (filter?.gioiTinh) {
       const query = buildSearchQuery(filter);
-      const res = await apiRequest<{ products: any[] }>(`/api/products/${filter.gioiTinh}?${query}`);
+      const res = await apiRequest<{ products: any[] }>(
+        `/api/products/${filter.gioiTinh}?${query}`
+      );
       return (res.products || []).map(mapBackendProductToSanPham);
     }
 
@@ -307,7 +423,9 @@ export const productService = {
   },
 
   async getFeatured(): Promise<SanPham[]> {
-    const res = await apiRequest<{ products: BackendProduct[] }>("/api/products/best-sellers?limit=8");
+    const res = await apiRequest<{ products: BackendProduct[] }>(
+      "/api/products/best-sellers?limit=8"
+    );
     return (res.products || []).map(mapBackendProductToSanPham);
   },
 
@@ -317,7 +435,9 @@ export const productService = {
   },
 
   async getBestSellers(): Promise<SanPham[]> {
-    const res = await apiRequest<{ products: BackendProduct[] }>("/api/products/best-sellers?limit=8");
+    const res = await apiRequest<{ products: BackendProduct[] }>(
+      "/api/products/best-sellers?limit=8"
+    );
     return (res.products || []).map(mapBackendProductToSanPham);
   },
 
@@ -343,5 +463,138 @@ export const productService = {
 
   async getReviews(slug: string) {
     return apiRequest(`/api/products/details/${slug}/reviews`);
+  },
+
+  async getCategories() {
+    return apiRequest<AdminCategoryRecord[]>("/api/categories");
+  },
+
+  async getAdminProducts() {
+    return apiRequest<{ status?: string; message?: string; data?: AdminProductRecord[] }>(
+      "/api/products",
+      {
+        auth: true,
+      }
+    );
+  },
+
+  async createProduct(payload: {
+    name: string;
+    slug: string;
+    shortDescription?: string;
+    brand?: string;
+    tags?: string[];
+    categoryId: string;
+  }) {
+    return apiRequest("/api/products/add-product", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      auth: true,
+    });
+  },
+
+  async createVariant(formData: FormData) {
+    return apiFormRequest("/api/variants/add-variant", formData, "POST");
+  },
+
+  async updateProduct(
+    productId: string,
+    payload: {
+      name?: string;
+      slug?: string;
+      shortDescription?: string;
+      brand?: string;
+      tags?: string[];
+      categoryId?: string;
+      status?: string;
+    }
+  ) {
+    return apiRequest(`/api/products/${encodeURIComponent(productId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      auth: true,
+    });
+  },
+
+  async updateVariant(variantId: string, payload: UpdateAdminVariantPayload) {
+    const formData = buildVariantFormData(payload);
+    return apiFormRequest(
+      `/api/variants/update-variant/${encodeURIComponent(variantId)}`,
+      formData,
+      "PUT"
+    );
+  },
+
+  async addVariantSize(variantId: string, payload: AdminVariantSizePayload) {
+    return apiRequest(`/api/variants/${encodeURIComponent(variantId)}/sizes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      auth: true,
+    });
+  },
+
+  async updateVariantImages(
+    variantId: string,
+    files: File[],
+    action: "append" | "replace" = "replace"
+  ) {
+    const formData = new FormData();
+
+    files.forEach((file) => {
+      formData.append("images", file);
+    });
+
+    return apiFormRequest(
+      `/api/variants/${encodeURIComponent(variantId)}/images?action=${action}`,
+      formData,
+      "PUT"
+    );
+  },
+
+  async updateVariantSize(
+    variantId: string,
+    sizeId: string,
+    payload: Partial<AdminVariantSizePayload>
+  ) {
+    return apiRequest(
+      `/api/variants/${encodeURIComponent(variantId)}/sizes/${encodeURIComponent(sizeId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        auth: true,
+      }
+    );
+  },
+
+  async removeVariantSize(variantId: string, sizeId: string) {
+    return apiRequest(
+      `/api/variants/${encodeURIComponent(variantId)}/sizes/${encodeURIComponent(sizeId)}`,
+      {
+        method: "DELETE",
+        auth: true,
+      }
+    );
+  },
+
+  async deleteVariant(variantId: string) {
+    return apiRequest(`/api/variants/${encodeURIComponent(variantId)}`, {
+      method: "DELETE",
+      auth: true,
+    });
+  },
+
+  async deleteProduct(productId: string) {
+    return apiRequest(`/api/products/${encodeURIComponent(productId)}`, {
+      method: "DELETE",
+      auth: true,
+    });
+  },
+
+  async reorderVariantImages(variantId: string, images: string[]) {
+    return apiRequest(`/api/variants/${encodeURIComponent(variantId)}/reorder-images`, {
+      method: "PUT",
+      body: JSON.stringify({ images }),
+      auth: true,
+    });
   },
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
   Star,
@@ -20,9 +20,14 @@ import { SanPham } from '@/types';
 import { useCart } from '@/hooks/useCart';
 import { useWishlist } from '@/hooks/useWishlist';
 import { formatPrice, getDiscountPercent } from '@/utils/format';
+import { toast } from 'sonner';
+
+const BUY_NOW_STORAGE_KEY = 'matewear_buy_now';
 
 export default function ProductDetail() {
   const { slug } = useParams();
+  const navigate = useNavigate();
+
   const [product, setProduct] = useState<SanPham | null>(null);
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
@@ -64,16 +69,19 @@ export default function ProductDetail() {
           p.kichCo?.[0] ||
           '';
 
-        const firstImage =
-          firstVariant?.hinhAnh?.[0] ||
-          p.hinhAnhList?.[0] ||
-          p.hinhAnh ||
-          '/placeholder.svg';
+        const firstImages =
+          firstVariant?.hinhAnh?.length
+            ? firstVariant.hinhAnh
+            : p.hinhAnhList?.length
+              ? p.hinhAnhList
+              : p.hinhAnh
+                ? [p.hinhAnh]
+                : ['/placeholder.svg'];
 
         setProduct(p);
         setSelectedColor(firstColor);
         setSelectedSize(firstSize);
-        setSelectedImage(firstImage);
+        setSelectedImage(firstImages[0] || '/placeholder.svg');
         setQuantity(1);
       } catch (err) {
         console.error('Load product detail failed:', err);
@@ -94,40 +102,50 @@ export default function ProductDetail() {
     };
   }, [slug]);
 
+  const selectedVariant =
+    product?.bienThe?.find((v) => v.mau === selectedColor) ||
+    product?.bienThe?.[0];
+
+  const variantAvailableSizes =
+    selectedVariant?.kichThuoc
+      ?.filter((s) => s.stock > 0)
+      .map((s) => s.size) || [];
+
+  const mappedSizes = product?.colorSizeMap?.[selectedColor] || [];
+
+  const availableSizes =
+    variantAvailableSizes.length > 0
+      ? variantAvailableSizes
+      : mappedSizes.length > 0
+        ? mappedSizes
+        : product?.kichCo || [];
+
+  const uniqueAvailableSizes = Array.from(new Set(availableSizes));
+
+  const selectedSizeInfo =
+    selectedVariant?.kichThuoc?.find((s) => s.size === selectedSize) ||
+    selectedVariant?.kichThuoc?.find((s) => s.stock > 0) ||
+    selectedVariant?.kichThuoc?.[0];
+
+  const galleryImagesRaw =
+    selectedVariant?.hinhAnh?.length
+      ? selectedVariant.hinhAnh
+      : product?.hinhAnhList?.length
+        ? product.hinhAnhList
+        : product?.hinhAnh
+          ? [product.hinhAnh]
+          : ['/placeholder.svg'];
+
+  const galleryImages = Array.from(
+    new Set(galleryImagesRaw.filter((img): img is string => Boolean(img)))
+  );
+
   useEffect(() => {
     if (!product) return;
 
-    const selectedVariant =
-      product.bienThe?.find((v) => v.mau === selectedColor) ||
-      product.bienThe?.[0];
-
-    const variantAvailableSizes =
-      selectedVariant?.kichThuoc
-        ?.filter((s) => s.stock > 0)
-        .map((s) => s.size) || [];
-
-    const mappedSizes = product.colorSizeMap?.[selectedColor] || [];
-
-    const availableSizes =
-      variantAvailableSizes.length > 0
-        ? variantAvailableSizes
-        : mappedSizes.length > 0
-        ? mappedSizes
-        : product.kichCo || [];
-
-    const uniqueAvailableSizes = Array.from(new Set(availableSizes));
-
-    if (
-      uniqueAvailableSizes.length > 0 &&
-      !uniqueAvailableSizes.includes(selectedSize)
-    ) {
+    if (uniqueAvailableSizes.length > 0 && !uniqueAvailableSizes.includes(selectedSize)) {
       setSelectedSize(uniqueAvailableSizes[0]);
     }
-
-    const selectedSizeInfo =
-      selectedVariant?.kichThuoc?.find((s) => s.size === selectedSize) ||
-      selectedVariant?.kichThuoc?.find((s) => s.stock > 0) ||
-      selectedVariant?.kichThuoc?.[0];
 
     const currentStock = selectedSizeInfo?.stock ?? product.soLuongTon ?? 0;
 
@@ -135,7 +153,19 @@ export default function ProductDetail() {
       if (currentStock <= 0) return 1;
       return Math.min(Math.max(q, 1), currentStock);
     });
-  }, [product, selectedColor, selectedSize]);
+
+    if (galleryImages.length > 0 && !galleryImages.includes(selectedImage)) {
+      setSelectedImage(galleryImages[0]);
+    }
+  }, [
+    product,
+    selectedColor,
+    selectedSize,
+    selectedImage,
+    selectedSizeInfo,
+    uniqueAvailableSizes,
+    galleryImages,
+  ]);
 
   if (loading) {
     return (
@@ -160,44 +190,6 @@ export default function ProductDetail() {
     );
   }
 
-  const selectedVariant =
-    product.bienThe?.find((v) => v.mau === selectedColor) ||
-    product.bienThe?.[0];
-
-  const variantAvailableSizes =
-    selectedVariant?.kichThuoc
-      ?.filter((s) => s.stock > 0)
-      .map((s) => s.size) || [];
-
-  const mappedSizes = product.colorSizeMap?.[selectedColor] || [];
-
-  const availableSizes =
-    variantAvailableSizes.length > 0
-      ? variantAvailableSizes
-      : mappedSizes.length > 0
-      ? mappedSizes
-      : product.kichCo || [];
-
-  const uniqueAvailableSizes = Array.from(new Set(availableSizes));
-
-  const selectedSizeInfo =
-    selectedVariant?.kichThuoc?.find((s) => s.size === selectedSize) ||
-    selectedVariant?.kichThuoc?.find((s) => s.stock > 0) ||
-    selectedVariant?.kichThuoc?.[0];
-
-  const galleryImagesRaw =
-    selectedVariant?.hinhAnh?.length
-      ? selectedVariant.hinhAnh
-      : product.hinhAnhList?.length
-      ? product.hinhAnhList
-      : product.hinhAnh
-      ? [product.hinhAnh]
-      : ['/placeholder.svg'];
-
-  const galleryImages = Array.from(
-    new Set(galleryImagesRaw.filter((img): img is string => Boolean(img)))
-  );
-
   const displayImage =
     galleryImages.includes(selectedImage)
       ? selectedImage
@@ -220,6 +212,47 @@ export default function ProductDetail() {
       : null;
 
   const canAddToCart = Boolean(displayStock > 0 && selectedSize && selectedVariant?.id);
+  const productId = String(product.id);
+
+  const askAiInWidget = (prompt: string) => {
+    window.dispatchEvent(
+      new CustomEvent('matewear-ai-prompt', {
+        detail: { prompt },
+      })
+    );
+  };
+
+  const handleBuyNow = () => {
+    if (!product || !selectedVariant?.id || !selectedSize || !canAddToCart) {
+      toast.error('Vui lòng chọn đầy đủ màu, size và số lượng hợp lệ');
+      return;
+    }
+
+    const buyNowItem = {
+      id: `buy-now-${product.id}-${selectedVariant.id}-${selectedSize}`,
+      productId: String(product.id),
+      productSlug: slug || '',
+      variantId: String(selectedVariant.id),
+      kichCo: selectedSize,
+      soLuong: quantity,
+      gia: displayPrice,
+      mauSac: selectedColor,
+      hinhAnh: displayImage,
+      sanPham: {
+        id: String(product.id),
+        ten: product.ten,
+        hinhAnh: displayImage,
+      },
+    };
+
+    try {
+      localStorage.setItem(BUY_NOW_STORAGE_KEY, JSON.stringify(buyNowItem));
+      navigate('/thanh-toan?mode=buy-now');
+    } catch (error) {
+      console.error('handleBuyNow error:', error);
+      toast.error('Không thể xử lý mua ngay');
+    }
+  };
 
   return (
     <MainLayout>
@@ -233,38 +266,64 @@ export default function ProductDetail() {
             Sản phẩm
           </Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <span className="font-medium text-foreground">{product.ten}</span>
+          <span className="line-clamp-1 font-medium text-foreground">{product.ten}</span>
         </nav>
 
-        <div className="mb-16 grid gap-8 lg:grid-cols-2">
+        <div className="mb-16 grid gap-8 lg:grid-cols-[88px_minmax(0,1fr)_520px]">
+          <div className="hidden lg:flex lg:max-h-[680px] lg:flex-col lg:gap-3 lg:overflow-y-auto">
+            {galleryImages.map((img, i) => (
+              <button
+                key={`${img}-${i}`}
+                type="button"
+                onClick={() => setSelectedImage(img)}
+                className={`overflow-hidden rounded-xl border-2 bg-secondary transition-all ${
+                  displayImage === img
+                    ? 'border-primary shadow-sm'
+                    : 'border-transparent hover:border-border'
+                }`}
+              >
+                <img
+                  src={img}
+                  alt=""
+                  className="h-24 w-24 object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = '/placeholder.svg';
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-3">
-            <div className="aspect-square overflow-hidden rounded-xl bg-secondary">
-              <img
-                src={displayImage}
-                alt={product.ten}
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.src = '/placeholder.svg';
-                }}
-              />
+            <div className="overflow-hidden rounded-2xl bg-secondary">
+              <div className="aspect-[4/5] w-full">
+                <img
+                  src={displayImage}
+                  alt={product.ten}
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = '/placeholder.svg';
+                  }}
+                />
+              </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
               {galleryImages.map((img, i) => (
                 <button
                   key={`${img}-${i}`}
                   type="button"
                   onClick={() => setSelectedImage(img)}
-                  className={`aspect-square overflow-hidden rounded-lg border-2 bg-secondary transition-colors ${
+                  className={`shrink-0 overflow-hidden rounded-xl border-2 bg-secondary transition-all ${
                     displayImage === img
-                      ? 'border-accent'
-                      : 'border-transparent hover:border-accent'
+                      ? 'border-primary shadow-sm'
+                      : 'border-transparent hover:border-border'
                   }`}
                 >
                   <img
                     src={img}
                     alt=""
-                    className="h-full w-full object-cover"
+                    className="h-20 w-20 object-cover"
                     onError={(e) => {
                       e.currentTarget.src = '/placeholder.svg';
                     }}
@@ -280,38 +339,38 @@ export default function ProductDetail() {
                 {product.badge === 'sale'
                   ? 'Sale'
                   : product.badge === 'bestseller'
-                  ? 'Bán chạy'
-                  : product.badge === 'moi'
-                  ? 'Mới'
-                  : 'Hot'}
+                    ? 'Bán chạy'
+                    : product.badge === 'moi'
+                      ? 'Mới'
+                      : 'Hot'}
               </Badge>
             )}
 
-            <h1 className="text-2xl font-bold md:text-3xl">{product.ten}</h1>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold leading-tight md:text-3xl">{product.ten}</h1>
 
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`h-4 w-4 ${
-                      i < Math.round(product.danhGia || 0)
-                        ? 'fill-warning text-warning'
-                        : 'text-border'
-                    }`}
-                  />
-                ))}
-                <span className="ml-1 text-sm text-muted-foreground">
-                  {product.danhGia || 0} ({product.soLuongDanhGia || 0} đánh giá)
-                </span>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`h-4 w-4 ${
+                        i < Math.round(product.danhGia || 0)
+                          ? 'fill-warning text-warning'
+                          : 'text-border'
+                      }`}
+                    />
+                  ))}
+                  <span className="ml-1">
+                    {product.danhGia || 0} ({product.soLuongDanhGia || 0} đánh giá)
+                  </span>
+                </div>
+
+                <span>Đã bán {(product.daBan || 0).toLocaleString()}</span>
               </div>
-
-              <span className="text-sm text-muted-foreground">
-                Đã bán {(product.daBan || 0).toLocaleString()}
-              </span>
             </div>
 
-            <div className="flex items-baseline gap-3">
+            <div className="flex flex-wrap items-end gap-3">
               <span className="text-3xl font-bold text-foreground">
                 {formatPrice(displayPrice)}
               </span>
@@ -327,19 +386,22 @@ export default function ProductDetail() {
                 )}
             </div>
 
-            <p className="text-muted-foreground">{product.moTa}</p>
+            <p className="leading-7 text-muted-foreground">{product.moTa}</p>
 
-            <div>
-              <p className="mb-2 text-sm font-medium">
-                Màu sắc: <span className="text-accent">{selectedColor}</span>
+            <div className="space-y-3">
+              <p className="text-sm font-medium">
+                Màu sắc: <span className="text-primary">{selectedColor}</span>
               </p>
-              <div className="flex gap-2">
+
+              <div className="flex flex-wrap gap-3">
                 {product.mauSac?.map((m) => (
                   <button
                     key={`${m.ten}-${m.ma}`}
                     type="button"
                     onClick={() => {
-                      const variant = product.bienThe?.find((v) => v.mau === m.ten);
+                      const variant =
+                        product.bienThe?.find((v) => v.mau === m.ten) ||
+                        product.bienThe?.[0];
 
                       const nextAvailableSizes =
                         variant?.kichThuoc
@@ -353,82 +415,106 @@ export default function ProductDetail() {
                         variant?.hinhAnh?.length
                           ? variant.hinhAnh
                           : product.hinhAnhList?.length
-                          ? product.hinhAnhList
-                          : product.hinhAnh
-                          ? [product.hinhAnh]
-                          : ['/placeholder.svg'];
+                            ? product.hinhAnhList
+                            : product.hinhAnh
+                              ? [product.hinhAnh]
+                              : ['/placeholder.svg'];
 
                       setSelectedColor(m.ten);
                       setSelectedSize(nextAvailableSizes[0] || '');
                       setSelectedImage(nextImages[0] || '/placeholder.svg');
                       setQuantity(1);
                     }}
-                    className={`h-9 w-9 rounded-full border-2 transition-all ${
+                    className={`relative h-10 w-10 rounded-full border-2 transition-all ${
                       selectedColor === m.ten
-                        ? 'scale-110 border-accent'
+                        ? 'scale-105 border-primary ring-2 ring-primary/20'
                         : 'border-border'
                     }`}
                     style={{ backgroundColor: m.ma }}
                     title={m.ten}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-medium">
-                Kích cỡ: <span className="text-accent">{selectedSize}</span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {uniqueAvailableSizes.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSize(s);
-                      setQuantity(1);
-                    }}
-                    className={`h-9 min-w-[2.5rem] rounded-lg border px-3 text-sm font-medium transition-all ${
-                      selectedSize === s
-                        ? 'border-accent bg-accent text-accent-foreground'
-                        : 'border-border hover:border-accent/50'
-                    }`}
                   >
-                    {s}
+                    <span className="sr-only">{m.ten}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div>
-              <p className="mb-2 text-sm font-medium">Số lượng</p>
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                >
-                  <Minus className="h-4 w-4" />
-                </Button>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">
+                  Kích cỡ: <span className="text-primary">{selectedSize || 'Chưa chọn'}</span>
+                </p>
+                <button type="button" className="text-sm text-primary hover:underline">
+                  Hướng dẫn chọn size
+                </button>
+              </div>
 
-                <span className="w-10 text-center font-medium">{quantity}</span>
+              <div className="flex flex-wrap gap-2">
+                {uniqueAvailableSizes.map((s) => {
+                  const optionStock =
+                    selectedVariant?.kichThuoc?.find((item) => item.size === s)?.stock ?? 0;
+                  const isSelected = selectedSize === s;
+                  const isDisabled =
+                    selectedVariant?.kichThuoc?.length ? optionStock <= 0 : false;
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={() =>
-                    setQuantity((q) =>
-                      Math.min(displayStock > 0 ? displayStock : 1, q + 1)
-                    )
-                  }
-                  disabled={displayStock <= 0}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() => {
+                        setSelectedSize(s);
+                        setQuantity(1);
+                      }}
+                      className={`min-w-[52px] rounded-xl border px-4 py-2 text-sm font-medium transition-all ${
+                        isSelected
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : isDisabled
+                            ? 'cursor-not-allowed border-border bg-muted text-muted-foreground opacity-60'
+                            : 'border-border bg-background hover:border-primary/50'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Số lượng</p>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center rounded-xl border">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 rounded-r-none"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+
+                  <span className="flex h-11 min-w-[52px] items-center justify-center font-medium">
+                    {quantity}
+                  </span>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 rounded-l-none"
+                    onClick={() =>
+                      setQuantity((q) =>
+                        Math.min(displayStock > 0 ? displayStock : 1, q + 1)
+                      )
+                    }
+                    disabled={displayStock <= 0}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
 
                 <span className="text-sm text-muted-foreground">
                   Còn {displayStock || 0} sản phẩm
@@ -436,7 +522,7 @@ export default function ProductDetail() {
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-1">
               <Button
                 type="button"
                 size="lg"
@@ -462,7 +548,8 @@ export default function ProductDetail() {
                   );
                 }}
               >
-                <ShoppingBag className="h-5 w-5" /> Thêm vào giỏ
+                <ShoppingBag className="h-5 w-5" />
+                Thêm vào giỏ
               </Button>
 
               <Button
@@ -471,6 +558,7 @@ export default function ProductDetail() {
                 variant="secondary"
                 className="flex-1"
                 disabled={!canAddToCart}
+                onClick={handleBuyNow}
               >
                 Mua ngay
               </Button>
@@ -481,38 +569,67 @@ export default function ProductDetail() {
                 variant="outline"
                 className="px-3"
                 onClick={() =>
-                  isInWishlist(product.id)
-                    ? removeWishlist(product.id)
+                  isInWishlist(productId)
+                    ? removeWishlist(productId)
                     : addWishlist(product)
                 }
               >
                 <Heart
-                  className={`h-5 w-5 ${
-                    isInWishlist(product.id) ? 'fill-sale text-sale' : ''
-                  }`}
+                  className={`h-5 w-5 ${isInWishlist(productId) ? 'fill-sale text-sale' : ''}`}
                 />
               </Button>
             </div>
 
-            <div className="rounded-xl border border-accent/20 bg-accent/5 p-4">
+            <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4">
               <p className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <Bot className="h-4 w-4 text-accent" /> Trợ lý AI hỗ trợ bạn
+                <Bot className="h-4 w-4 text-accent" />
+                Trợ lý AI hỗ trợ bạn
               </p>
+
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
-                  <Link to="/ai-tu-van">
-                    <Bot className="h-3.5 w-3.5" /> AI tư vấn size
-                  </Link>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={() =>
+                    askAiInWidget(
+                      `Tư vấn size cho sản phẩm "${product.ten}". Màu đang xem: ${selectedColor || 'chưa chọn'}, size đang chọn: ${selectedSize || 'chưa chọn'}, giá hiện tại: ${formatPrice(displayPrice)}.`
+                    )
+                  }
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  AI tư vấn size
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
-                  <Link to="/ai-tu-van">
-                    <Bot className="h-3.5 w-3.5" /> AI gợi ý phối đồ
-                  </Link>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={() =>
+                    askAiInWidget(
+                      `Gợi ý phối đồ với sản phẩm "${product.ten}" màu ${selectedColor || 'hiện tại'}.`
+                    )
+                  }
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  AI gợi ý phối đồ
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
-                  <Link to="/ai-tu-van">
-                    <Bot className="h-3.5 w-3.5" /> Sản phẩm tương tự
-                  </Link>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={() =>
+                    askAiInWidget(
+                      `Gợi ý sản phẩm tương tự với "${product.ten}", màu ${selectedColor || 'hiện tại'}, mức giá khoảng ${formatPrice(displayPrice)}.`
+                    )
+                  }
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  Sản phẩm tương tự
                 </Button>
               </div>
             </div>
@@ -522,20 +639,20 @@ export default function ProductDetail() {
                 { icon: Truck, label: 'Miễn phí ship đơn 500K' },
                 { icon: RotateCcw, label: 'Đổi trả 30 ngày' },
                 { icon: Shield, label: 'Bảo hành chất lượng' },
-              ].map((p) => (
+              ].map((item) => (
                 <div
-                  key={p.label}
-                  className="flex flex-col items-center gap-1.5 rounded-lg border border-border p-3 text-center"
+                  key={item.label}
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-3 text-center"
                 >
-                  <p.icon className="h-5 w-5 text-accent" />
-                  <span className="text-[11px] text-muted-foreground">{p.label}</span>
+                  <item.icon className="h-5 w-5 text-accent" />
+                  <span className="text-[11px] text-muted-foreground">{item.label}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="mb-12">
+        <div className="mb-12 rounded-2xl border p-6">
           <h2 className="mb-4 text-xl font-bold">Mô tả sản phẩm</h2>
           <div className="prose prose-sm max-w-none text-muted-foreground">
             <p>{product.moTaChiTiet || product.moTa}</p>
@@ -546,8 +663,8 @@ export default function ProductDetail() {
                 {product.gioiTinh === 'nam'
                   ? 'Nam'
                   : product.gioiTinh === 'nu'
-                  ? 'Nữ'
-                  : 'Unisex'}
+                    ? 'Nữ'
+                    : 'Unisex'}
               </li>
               <li>Danh mục: {product.danhMuc}</li>
             </ul>
