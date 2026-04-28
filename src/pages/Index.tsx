@@ -161,6 +161,7 @@ export default function Index() {
   const [newArrivals, setNewArrivals] = useState<SanPham[]>([]);
   const [saleItems, setSaleItems] = useState<SanPham[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
+  const [categoryCountsLoaded, setCategoryCountsLoaded] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
 
   const { addItem } = useCart();
@@ -222,6 +223,7 @@ export default function Index() {
 
       if (mounted) {
         setCategoryCounts(Object.fromEntries(countEntries));
+        setCategoryCountsLoaded(true);
       }
     }
 
@@ -268,9 +270,12 @@ export default function Index() {
   const saleProducts = saleItems.slice(0, 10);
   const homepageAllProducts = allProducts.slice(0, 10);
 
+  const visibleCategories = categoryCountsLoaded
+    ? danhMucData.filter((cat) => (categoryCounts[cat.ten] ?? 0) > 0)
+    : danhMucData.slice(0, 10);
+
   return (
     <MainLayout>
-      {/* Hero */}
       <section className="relative h-[420px] md:h-[480px] overflow-hidden bg-primary">
         {heroSlides.map((heroSlide, index) => (
           <div
@@ -357,7 +362,6 @@ export default function Index() {
         </button>
       </section>
 
-      {/* Trust strip */}
       <section className="bg-primary text-primary-foreground py-2">
         <div className="container mx-auto flex items-center justify-center gap-6 md:gap-10 text-[11px] font-medium px-4 overflow-x-auto">
           <span className="flex items-center gap-1.5 whitespace-nowrap">
@@ -419,7 +423,6 @@ export default function Index() {
         isWishlisted={isInWishlist}
       />
 
-      {/* Categories */}
       <section className="py-8 px-4 bg-secondary/30">
         <div className="container mx-auto">
           <div className="flex items-center justify-between mb-5">
@@ -438,8 +441,8 @@ export default function Index() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 gap-2.5">
-            {danhMucData.slice(0, 10).map((cat) => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+            {visibleCategories.map((cat) => {
               const count = categoryCounts[cat.ten] ?? 0;
 
               return (
@@ -472,7 +475,6 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Collection banners */}
       <section className="py-8 px-4">
         <div className="container mx-auto grid md:grid-cols-2 gap-3">
           <Link
@@ -533,7 +535,6 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Sports campaign */}
       <section className="px-4 pb-8">
         <div className="container mx-auto">
           <div className="relative rounded-xl overflow-hidden h-56 md:h-64">
@@ -574,7 +575,6 @@ export default function Index() {
         </div>
       </section>
 
-      {/* AI section */}
       <section className="py-8 px-4 bg-secondary/30">
         <div className="container mx-auto">
           <div className="relative rounded-xl overflow-hidden bg-primary">
