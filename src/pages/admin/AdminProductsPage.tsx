@@ -30,6 +30,8 @@ type ProductForm = {
   shortDescription: string;
   brand: string;
   categoryId: string;
+  gender: 'nam' | 'nu' | 'unisex';
+  material: string;
   tagsText: string;
 };
 
@@ -179,6 +181,8 @@ const emptyProductForm: ProductForm = {
   shortDescription: '',
   brand: '',
   categoryId: '',
+  gender: 'unisex',
+  material: '',
   tagsText: '',
 };
 
@@ -298,6 +302,8 @@ export default function AdminProductsPage() {
         product.slug,
         product.brand,
         product.shortDescription,
+        product.gender,
+        product.material,
         getCategoryName(product, categories),
       ]
         .filter(Boolean)
@@ -406,6 +412,11 @@ export default function AdminProductsPage() {
       shortDescription: product.shortDescription || '',
       brand: product.brand || '',
       categoryId: getCategoryIdValue(product),
+      gender:
+        product.gender === 'nam' || product.gender === 'nu' || product.gender === 'unisex'
+          ? product.gender
+          : 'unisex',
+      material: product.material || '',
       tagsText: getProductTagsText(product),
     });
     setSlugTouched(true);
@@ -468,6 +479,8 @@ export default function AdminProductsPage() {
         shortDescription: productForm.shortDescription.trim(),
         brand: productForm.brand.trim(),
         categoryId,
+        gender: productForm.gender,
+        material: productForm.material.trim(),
         tags,
       };
 
@@ -492,9 +505,9 @@ export default function AdminProductsPage() {
       console.error('submitProduct error:', error);
       toast.error(
         error?.message ||
-          (productFormMode === 'create'
-            ? 'Không thể tạo sản phẩm'
-            : 'Không thể cập nhật sản phẩm')
+        (productFormMode === 'create'
+          ? 'Không thể tạo sản phẩm'
+          : 'Không thể cập nhật sản phẩm')
       );
     } finally {
       setSubmittingProduct(false);
@@ -1048,6 +1061,35 @@ export default function AdminProductsPage() {
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Giới tính</label>
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={productForm.gender}
+                    onChange={(e) =>
+                      handleChangeProductForm(
+                        'gender',
+                        e.target.value as ProductForm['gender']
+                      )
+                    }
+                    disabled={submittingProduct}
+                  >
+                    <option value="nam">Nam</option>
+                    <option value="nu">Nữ</option>
+                    <option value="unisex">Unisex</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Chất liệu</label>
+                  <Input
+                    value={productForm.material}
+                    onChange={(e) => handleChangeProductForm('material', e.target.value)}
+                    placeholder="Ví dụ: Cotton, Polyester, Kaki..."
+                    disabled={submittingProduct}
+                  />
+                </div>
               </div>
 
               <div>
@@ -1138,7 +1180,7 @@ export default function AdminProductsPage() {
                 <h3 className="mb-3 text-sm font-semibold">Biến thể hiện có</h3>
 
                 {Array.isArray(selectedVariantProduct.variants) &&
-                selectedVariantProduct.variants.length > 0 ? (
+                  selectedVariantProduct.variants.length > 0 ? (
                   <div className="space-y-4">
                     {selectedVariantProduct.variants.map((variant, index) => {
                       const images = getVariantImages(variant);
@@ -1906,6 +1948,8 @@ export default function AdminProductsPage() {
                     <TableHead>Sản phẩm</TableHead>
                     <TableHead>Danh mục</TableHead>
                     <TableHead>Thương hiệu</TableHead>
+                    <TableHead>Giới tính</TableHead>
+                    <TableHead>Chất liệu</TableHead>
                     <TableHead>Giá từ</TableHead>
                     <TableHead>Tồn kho</TableHead>
                     <TableHead>Biến thể</TableHead>
@@ -1947,6 +1991,15 @@ export default function AdminProductsPage() {
 
                         <TableCell>{getCategoryName(product, categories)}</TableCell>
                         <TableCell>{product.brand || 'Chưa có'}</TableCell>
+                        <TableCell>
+                          {product.gender === 'nam'
+                            ? 'Nam'
+                            : product.gender === 'nu'
+                              ? 'Nữ'
+                              : 'Unisex'}
+                        </TableCell>
+
+                        <TableCell>{product.material || 'Đang cập nhật'}</TableCell>
                         <TableCell className="font-medium">{formatPrice(minPrice)}</TableCell>
                         <TableCell>{totalStock}</TableCell>
                         <TableCell>{getVariantCount(product)}</TableCell>

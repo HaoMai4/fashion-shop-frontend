@@ -4,8 +4,6 @@ const TOKEN_KEY = 'stylehub_token';
 const LEGACY_TOKEN_KEY = 'token';
 const USER_KEY = 'stylehub_user';
 
-// Nếu VITE_API_BASE_URL đã là http://localhost:8686/api
-// thì đổi dòng dưới thành '/users'
 const USER_API_PREFIX = '/api/users';
 
 export interface UserProfile {
@@ -40,8 +38,22 @@ export interface AuthResponse {
   user: UserProfile;
 }
 
+export interface WishlistResponse {
+  message?: string;
+  wishlist?: any[];
+  data?: any[];
+}
+
 function buildPath(path: string) {
   return `${USER_API_PREFIX}${path}`;
+}
+
+function getAuthHeaders() {
+  const token = getToken();
+
+  return {
+    Authorization: `Bearer ${token || ''}`,
+  };
 }
 
 function normalizeUser(raw: any): UserProfile {
@@ -107,6 +119,16 @@ function splitFullName(fullName: string) {
   const firstName = parts.join(' ');
 
   return { firstName, lastName };
+}
+
+function extractWishlist(raw: any): any[] {
+  const list =
+    raw?.wishlist ||
+    raw?.data ||
+    raw?.items ||
+    raw;
+
+  return Array.isArray(list) ? list : [];
 }
 
 export function saveAuth(auth: AuthResponse) {
@@ -176,13 +198,9 @@ export async function register(data: RegisterPayload): Promise<AuthResponse> {
 }
 
 export async function getMe(): Promise<UserProfile> {
-  const token = getToken();
-
   const raw = await apiRequest<any>(buildPath('/me'), {
     method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token || ''}`,
-    },
+    headers: getAuthHeaders(),
   });
 
   const user = normalizeUser(raw?.user || raw?.data || raw);
@@ -191,17 +209,43 @@ export async function getMe(): Promise<UserProfile> {
 }
 
 export async function updateMe(payload: Partial<UserProfile>): Promise<UserProfile> {
-  const token = getToken();
-
   const raw = await apiRequest<any>(buildPath('/me'), {
     method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${token || ''}`,
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   });
 
   const user = normalizeUser(raw?.user || raw?.data || raw);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   return user;
+}
+
+// =========================
+// Wishlist
+// =========================
+export async function getWishlist(): Promise<any[]> {
+  const raw = await apiRequest<WishlistResponse>(buildPath('/wishlist'), {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  return extractWishlist(raw);
+}
+
+export async function addToWishlist(productId: string): Promise<any[]> {
+  const raw = await apiRequest<WishlistResponse>(buildPath(`/wishlist/${productId}`), {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  return extractWishlist(raw);
+}
+
+export async function removeFromWishlist(productId: string): Promise<any[]> {
+  const raw = await apiRequest<WishlistResponse>(buildPath(`/wishlist/${productId}`), {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  return extractWishlist(raw);
 }

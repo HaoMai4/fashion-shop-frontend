@@ -10,12 +10,22 @@ type BackendProduct = {
   name: string;
   slug: string;
   shortDescription?: string;
+  description?: string;
   brand?: string;
+  material?: string;
+  gender?: string;
+  gioiTinh?: string;
+  tags?: string[];
   rating?: {
     average?: number;
     count?: number;
   };
   category?: {
+    _id?: string;
+    name?: string;
+    slug?: string;
+  };
+  categoryId?: string | {
     _id?: string;
     name?: string;
     slug?: string;
@@ -33,6 +43,8 @@ type BackendProduct = {
     colorCode: string;
     images?: string[];
   }>;
+  variants?: any[];
+  defaultVariant?: any;
 };
 
 export type AdminCategoryRecord = {
@@ -64,6 +76,8 @@ export type AdminProductRecord = {
   slug: string;
   shortDescription?: string;
   brand?: string;
+  material?: string;
+  gender?: string;
   tags?: string[];
   categoryId?: string | { _id?: string; name?: string; slug?: string };
   status?: string;
@@ -94,17 +108,152 @@ type ProductColorOption = {
 };
 
 function inferGenderFromSlug(slug?: string): "nam" | "nu" | "unisex" {
-  if (!slug) return "unisex";
-  if (slug.includes("nam")) return "nam";
-  if (slug.includes("nu")) return "nu";
+  const normalized = normalizeText(slug || "");
+
+  if (normalized.includes("nam")) return "nam";
+  if (normalized.includes("nu")) return "nu";
+
   return "unisex";
 }
 
+function normalizeText(value: any) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isProductOnSale(product: SanPham) {
+  return typeof product.giaGoc === "number" && product.giaGoc > product.gia;
+}
+
+function matchCategory(product: SanPham, category: string) {
+  const target = normalizeText(category);
+
+  const values = [
+    product.danhMuc,
+    product.ten,
+    product.moTa,
+    ...(Array.isArray(product.tags) ? product.tags : []),
+  ].map(normalizeText);
+
+  if (values.some((value) => value.includes(target))) {
+    return true;
+  }
+
+  if (target === "do the thao") {
+    return values.some(
+      (value) =>
+        value.includes("the thao") ||
+        value.includes("sport") ||
+        value.includes("chay bo") ||
+        value.includes("training")
+    );
+  }
+
+  return false;
+}
+
+function matchColor(product: SanPham, colors: string[]) {
+  if (!colors.length) return true;
+
+  const productColors = product.mauSac.map((color) => normalizeText(color.ten));
+
+  return colors.some((color) => productColors.includes(normalizeText(color)));
+}
+
+function matchSize(product: SanPham, sizes: string[]) {
+  if (!sizes.length) return true;
+
+  const productSizes = product.kichCo.map((size) => normalizeText(size));
+
+  return sizes.some((size) => productSizes.includes(normalizeText(size)));
+}
+
+function applyLocalFilters(products: SanPham[], filter?: ProductFilter) {
+  if (!filter) return products;
+
+  let result = [...products];
+
+  if (filter.timKiem) {
+    const keyword = normalizeText(filter.timKiem);
+
+    result = result.filter((product) => {
+      const values = [
+        product.ten,
+        product.slug,
+        product.moTa,
+        product.danhMuc,
+        product.thuongHieu,
+        ...(Array.isArray(product.tags) ? product.tags : []),
+      ];
+
+      return values.some((value) => normalizeText(value).includes(keyword));
+    });
+  }
+
+  if (filter.gioiTinh) {
+    result = result.filter((product) => product.gioiTinh === filter.gioiTinh);
+  }
+
+  if (filter.danhMuc) {
+    result = result.filter((product) => matchCategory(product, filter.danhMuc!));
+  }
+
+  if (filter.khuyenMai) {
+    result = result.filter(isProductOnSale);
+  }
+
+  if (filter.giaMin !== undefined) {
+    result = result.filter((product) => product.gia >= Number(filter.giaMin));
+  }
+
+  if (filter.giaMax !== undefined) {
+    result = result.filter((product) => product.gia <= Number(filter.giaMax));
+  }
+
+  if (filter.mauSac?.length) {
+    result = result.filter((product) => matchColor(product, filter.mauSac || []));
+  }
+
+  if (filter.kichCo?.length) {
+    result = result.filter((product) => matchSize(product, filter.kichCo || []));
+  }
+
+  if (filter.sapXep) {
+    switch (filter.sapXep) {
+      case "gia_tang":
+        result.sort((a, b) => a.gia - b.gia);
+        break;
+
+      case "gia_giam":
+        result.sort((a, b) => b.gia - a.gia);
+        break;
+
+      case "moi_nhat":
+        result.sort(
+          (a, b) =>
+            new Date(b.ngayTao).getTime() - new Date(a.ngayTao).getTime()
+        );
+        break;
+
+      case "ban_chay":
+        result.sort((a, b) => (b.daBan || 0) - (a.daBan || 0));
+        break;
+    }
+  }
+
+  return result;
+}
+
 function mapBackendProductToSanPham(p: any): SanPham {
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+
   const defaultVariant =
     p.defaultVariant ||
-    p.variants?.find((v: any) => Array.isArray(v?.images) && v.images.length > 0) ||
-    p.variants?.[0] ||
+    variants.find((v: any) => Array.isArray(v?.images) && v.images.length > 0) ||
+    variants[0] ||
     null;
 
   const defaultSize =
@@ -118,63 +267,159 @@ function mapBackendProductToSanPham(p: any): SanPham {
     p.colorVariants?.[0]?.images?.[0] ||
     "/placeholder.svg";
 
+  const sizePrice = Number(defaultSize?.price || 0);
+  const sizeDiscountPrice = Number(defaultSize?.discountPrice || 0);
+
   const currentPrice =
-    p.finalPrice ??
-    p.discountPrice ??
-    defaultSize?.discountPrice ??
-    defaultSize?.price ??
-    p.price ??
+    Number(p.finalPrice || 0) ||
+    Number(p.discountPrice || 0) ||
+    (sizeDiscountPrice > 0 ? sizeDiscountPrice : 0) ||
+    Number(defaultSize?.finalPrice || 0) ||
+    sizePrice ||
+    Number(p.price || 0) ||
     0;
 
   const originalPrice =
-    defaultSize?.originalPrice ??
-    (typeof p.price === "number" && currentPrice < p.price ? p.price : undefined);
+    sizePrice > 0 && currentPrice > 0 && currentPrice < sizePrice
+      ? sizePrice
+      : typeof p.price === "number" && currentPrice < p.price
+        ? p.price
+        : undefined;
 
-  const colors: ProductColorOption[] =
-    p.colorVariants?.map((v: any): ProductColorOption => ({
-      ten: v.color,
-      ma: v.colorCode,
-    })) ||
-    (defaultVariant
-      ? [
-        {
-          ten: defaultVariant.color || "",
-          ma: defaultVariant.colorCode || "#000000",
-        },
-      ]
-      : []);
+  const category =
+    p.category ||
+    (p.categoryId && typeof p.categoryId === "object" ? p.categoryId : null);
 
-  const sizes =
-    p.availableSizes ||
-    defaultVariant?.sizes?.map((s: any) => s.size).filter(Boolean) ||
-    [];
+  const categoryName = category?.name || "";
+  const categorySlug = category?.slug || "";
+
+  const variantColors: ProductColorOption[] = variants
+    .map((v: any): ProductColorOption | null => {
+      const ten = typeof v.color === "string" ? v.color.trim() : "";
+      if (!ten) return null;
+
+      return {
+        ten,
+        ma:
+          typeof v.colorCode === "string" && v.colorCode.trim()
+            ? v.colorCode
+            : "#000000",
+      };
+    })
+    .filter((c): c is ProductColorOption => c !== null);
+
+  const colorVariantColors: ProductColorOption[] = Array.isArray(p.colorVariants)
+    ? p.colorVariants
+        .map((v: any): ProductColorOption | null => {
+          const ten = typeof v.color === "string" ? v.color.trim() : "";
+          if (!ten) return null;
+
+          return {
+            ten,
+            ma:
+              typeof v.colorCode === "string" && v.colorCode.trim()
+                ? v.colorCode
+                : "#000000",
+          };
+        })
+        .filter((c): c is ProductColorOption => c !== null)
+    : [];
+
+  const colors = Array.from(
+    new Map(
+      [...colorVariantColors, ...variantColors].map((color) => [color.ten, color])
+    ).values()
+  );
+
+  const productSizes =
+    Array.isArray(p.availableSizes) && p.availableSizes.length > 0
+      ? p.availableSizes
+      : Array.from(
+          new Set(
+            variants.flatMap((variant: any) =>
+              Array.isArray(variant?.sizes)
+                ? variant.sizes.map((s: any) => s.size).filter(Boolean)
+                : []
+            )
+          )
+        );
+
+  const genderRaw =
+    p.gender ||
+    p.gioiTinh ||
+    inferGenderFromSlug(categorySlug || categoryName || "");
+
+  const gioiTinh =
+    genderRaw === "nam" || genderRaw === "nu" || genderRaw === "unisex"
+      ? genderRaw
+      : "unisex";
 
   return {
     id: p._id,
     ten: p.name,
     slug: p.slug,
     moTa: p.shortDescription || "",
-    moTaChiTiet: "",
+    moTaChiTiet: p.description || "",
     gia: currentPrice,
     giaGoc: originalPrice,
     hinhAnh: image,
-    danhMuc: p.category?.name || "",
-    danhMucId: p.category?._id || p.categoryId || "",
-    gioiTinh: inferGenderFromSlug(p.category?.slug || ""),
+    danhMuc: categoryName,
+    danhMucId:
+      category?._id ||
+      (typeof p.categoryId === "string" ? p.categoryId : "") ||
+      "",
+    gioiTinh,
     thuongHieu: p.brand || "",
-    tags: p.tags || [],
+    tags: Array.isArray(p.tags) ? p.tags : [],
     daBan: p.soldQuantity || 0,
     ngayTao: p.createdAt || new Date().toISOString(),
     mauSac: colors,
-    kichCo: sizes,
-    badge: undefined,
+    kichCo: productSizes,
+    badge: originalPrice && originalPrice > currentPrice ? "sale" : undefined,
     danhGia: p.rating?.average || 0,
     soLuongDanhGia: p.rating?.count || 0,
-    chatLieu: "",
+    chatLieu: p.material || "",
     donHang: 0,
     soLuongTon:
-      defaultVariant?.sizes?.reduce((sum: number, s: any) => sum + (s.stock || 0), 0) || 0,
-  };
+      variants.reduce((sum: number, variant: any) => {
+        if (!Array.isArray(variant?.sizes)) return sum;
+
+        return (
+          sum +
+          variant.sizes.reduce(
+            (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
+            0
+          )
+        );
+      }, 0) || 0,
+
+    variants,
+    defaultVariantId: defaultVariant?._id || defaultVariant?.id || "",
+    defaultColor: defaultVariant?.color || "",
+    defaultSize: defaultSize?.size || "",
+    defaultPrice: currentPrice,
+
+    bienThe: variants.map((v: any) => ({
+      id: v._id,
+      mau: v.color || "",
+      maMau: v.colorCode || "#000000",
+      hinhAnh: Array.isArray(v.images) ? v.images : [],
+      kichThuoc: Array.isArray(v.sizes)
+        ? v.sizes.map((s: any) => ({
+            size: s.size,
+            price: s.price,
+            discountPrice: s.discountPrice,
+            finalPrice:
+              typeof s.finalPrice === "number"
+                ? s.finalPrice
+                : s.discountPrice && s.discountPrice > 0
+                  ? s.discountPrice
+                  : s.price,
+            stock: s.stock || 0,
+          }))
+        : [],
+    })),
+  } as SanPham;
 }
 
 function mapProductDetailToSanPham(p: any): SanPham {
@@ -230,10 +475,24 @@ function mapProductDetailToSanPham(p: any): SanPham {
     new Map<string, ProductColorOption>(colors.map((c) => [c.ten, c])).values()
   );
 
-  const sizes =
+  const productSizes =
     Array.isArray(p.availableSizes) && p.availableSizes.length > 0
       ? p.availableSizes
       : defaultVariant?.sizes?.map((s: any) => s.size).filter(Boolean) || [];
+
+  const category = p.categoryId || p.category || null;
+  const categoryName = category?.name || "";
+  const categorySlug = category?.slug || "";
+
+  const genderRaw =
+    p.gender ||
+    p.gioiTinh ||
+    inferGenderFromSlug(categorySlug || categoryName || "");
+
+  const gioiTinh =
+    genderRaw === "nam" || genderRaw === "nu" || genderRaw === "unisex"
+      ? genderRaw
+      : "unisex";
 
   return {
     id: p._id,
@@ -245,21 +504,27 @@ function mapProductDetailToSanPham(p: any): SanPham {
     giaGoc: originalPrice,
     hinhAnh: image,
     hinhAnhList: imageList,
-    danhMuc: p.categoryId?.name || "",
-    danhMucId: p.categoryId?._id || "",
-    gioiTinh: inferGenderFromSlug(p.categoryId?.slug || ""),
+    danhMuc: categoryName,
+    danhMucId: category?._id || "",
+    gioiTinh,
     thuongHieu: p.brand || "",
     tags: p.tags || [],
     daBan: p.soldQuantity || 0,
     ngayTao: p.createdAt || new Date().toISOString(),
     mauSac: uniqueColors,
-    kichCo: sizes,
-    badge: undefined,
+    kichCo: productSizes,
+    badge: originalPrice && originalPrice > currentPrice ? "sale" : undefined,
     danhGia: p.reviewsSummary?.average || p.rating?.average || 0,
     soLuongDanhGia: p.reviewsSummary?.count || p.rating?.count || 0,
     chatLieu: p.material || "",
     donHang: 0,
     soLuongTon: p.totalStock || 0,
+
+    variants,
+    defaultVariantId: defaultVariant?._id || defaultVariant?.id || "",
+    defaultColor: defaultVariant?.color || "",
+    defaultSize: defaultSize?.size || "",
+    defaultPrice: currentPrice,
 
     bienThe: variants.map((v: any) => ({
       id: v._id,
@@ -268,22 +533,22 @@ function mapProductDetailToSanPham(p: any): SanPham {
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => ({
-          size: s.size,
-          price: s.price,
-          discountPrice: s.discountPrice,
-          finalPrice:
-            typeof s.finalPrice === "number"
-              ? s.finalPrice
-              : s.discountPrice && s.discountPrice > 0
-                ? s.discountPrice
-                : s.price,
-          stock: s.stock || 0,
-        }))
+            size: s.size,
+            price: s.price,
+            discountPrice: s.discountPrice,
+            finalPrice:
+              typeof s.finalPrice === "number"
+                ? s.finalPrice
+                : s.discountPrice && s.discountPrice > 0
+                  ? s.discountPrice
+                  : s.price,
+            stock: s.stock || 0,
+          }))
         : [],
     })),
 
     colorSizeMap: p.colorSizeMap || {},
-  };
+  } as SanPham;
 }
 
 function buildSearchQuery(filter?: ProductFilter) {
@@ -374,44 +639,17 @@ function buildVariantFormData(payload: UpdateAdminVariantPayload) {
 
 export const productService = {
   async getAll(filter?: ProductFilter): Promise<SanPham[]> {
-    if (filter?.timKiem) {
-      const query = buildSearchQuery(filter);
-      const res = await apiRequest<{ products: any[] }>(`/api/products/search?${query}`);
-      return (res.products || []).map(mapBackendProductToSanPham);
-    }
+    const res = await apiRequest<{ data?: any[]; products?: any[] }>("/api/products/all");
 
-    if (filter?.gioiTinh) {
-      const query = buildSearchQuery(filter);
-      const res = await apiRequest<{ products: any[] }>(
-        `/api/products/${filter.gioiTinh}?${query}`
-      );
-      return (res.products || []).map(mapBackendProductToSanPham);
-    }
+    const rawProducts = Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.products)
+        ? res.products
+        : [];
 
-    if (filter?.danhMuc) {
-      const categorySlugMap: Record<string, string> = {
-        "Áo Polo": "ao-polo",
-        "Áo Thun": "ao-thun",
-        "Sơ Mi": "ao-so-mi",
-        "Quần Dài": "quan-dai",
-        "Quần Short": "quan-short",
-        "Đồ Thể Thao": "do-the-thao",
-        "Đồ Lót": "do-lot",
-        "Váy": "vay",
-        "Áo Khoác": "ao-khoac",
-        "Phụ Kiện": "phu-kien",
-      };
+    const mappedProducts = rawProducts.map(mapBackendProductToSanPham);
 
-      const slug = categorySlugMap[filter.danhMuc];
-      if (!slug) return [];
-
-      const query = buildSearchQuery(filter);
-      const res = await apiRequest<{ products: any[] }>(`/api/products/${slug}?${query}`);
-      return (res.products || []).map(mapBackendProductToSanPham);
-    }
-
-    const res = await apiRequest<{ data: any[] }>("/api/products/all");
-    return (res.data || []).map(mapBackendProductToSanPham);
+    return applyLocalFilters(mappedProducts, filter);
   },
 
   async getBySlug(slug: string): Promise<SanPham | null> {
@@ -442,17 +680,13 @@ export const productService = {
   },
 
   async getSaleItems(): Promise<SanPham[]> {
-    const all = await productService.getAll();
-    return all
-      .filter((p) => typeof p.giaGoc === "number" && p.giaGoc > p.gia)
-      .slice(0, 8);
+    const saleItems = await productService.getAll({ khuyenMai: true });
+    return saleItems.slice(0, 8);
   },
 
   async search(query: string): Promise<SanPham[]> {
-    const res = await apiRequest<{ products: BackendProduct[] }>(
-      `/api/products/search?q=${encodeURIComponent(query)}`
-    );
-    return (res.products || []).map(mapBackendProductToSanPham);
+    const allProducts = await productService.getAll({ timKiem: query });
+    return allProducts;
   },
 
   async getVariantDetails(variantId: string, size?: string) {
@@ -485,6 +719,8 @@ export const productService = {
     brand?: string;
     tags?: string[];
     categoryId: string;
+    gender?: string;
+    material?: string;
   }) {
     return apiRequest("/api/products/add-product", {
       method: "POST",
@@ -507,6 +743,8 @@ export const productService = {
       tags?: string[];
       categoryId?: string;
       status?: string;
+      gender?: string;
+      material?: string;
     }
   ) {
     return apiRequest(`/api/products/${encodeURIComponent(productId)}`, {

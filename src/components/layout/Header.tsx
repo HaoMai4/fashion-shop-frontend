@@ -18,11 +18,12 @@ import { useWishlist } from '@/hooks/useWishlist';
 import { getStoredUser, isLoggedIn } from '@/services/api/userService';
 
 const navItems = [
+  { label: 'Tất cả', href: '/san-pham' },
   { label: 'Nam', href: '/san-pham?gioiTinh=nam' },
   { label: 'Nữ', href: '/san-pham?gioiTinh=nu' },
   { label: 'Thể thao', href: '/san-pham?danhMuc=Đồ Thể Thao' },
   { label: 'Phụ kiện', href: '/san-pham?danhMuc=Phụ Kiện' },
-  { label: 'Sale', href: '/san-pham?khuyenMai=true' },
+  { label: 'Đang sale', href: '/san-pham?khuyenMai=true' },
   { label: 'Bộ sưu tập', href: '/san-pham' },
   { label: 'AI Tư vấn', href: '/ai-tu-van', icon: true },
 ];
@@ -52,8 +53,9 @@ export default function Header() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+
     if (searchQuery.trim()) {
-      window.location.href = `/san-pham?timKiem=${encodeURIComponent(searchQuery)}`;
+      window.location.href = `/san-pham?timKiem=${encodeURIComponent(searchQuery.trim())}`;
     }
   };
 
@@ -68,12 +70,14 @@ export default function Header() {
           </SheetTrigger>
 
           <SheetContent side="left" className="w-72">
-            <SheetTitle className="text-xl font-bold tracking-tight">MATEWEAR</SheetTitle>
+            <SheetTitle className="text-xl font-bold tracking-tight">
+              MATEWEAR
+            </SheetTitle>
 
             <nav className="mt-6 flex flex-col gap-1">
               {navItems.map((item) => (
                 <Link
-                  key={item.href}
+                  key={`${item.label}-${item.href}`}
                   to={item.href}
                   className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-secondary hover:text-foreground"
                 >
@@ -95,14 +99,17 @@ export default function Header() {
           </SheetContent>
         </Sheet>
 
-        <Link to="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground">
+        <Link
+          to="/"
+          className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground"
+        >
           MATEWEAR
         </Link>
 
         <nav className="hidden lg:flex items-center gap-1">
           {navItems.map((item) => (
             <Link
-              key={item.href}
+              key={`${item.label}-${item.href}`}
               to={item.href}
               className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 item.icon
@@ -136,7 +143,9 @@ export default function Header() {
                 className="w-40 md:w-64 h-9"
                 autoFocus
               />
+
               <Button
+                type="button"
                 variant="ghost"
                 size="icon"
                 onClick={() => setSearchOpen(false)}
@@ -166,6 +175,7 @@ export default function Header() {
             <Button variant="ghost" size="icon" className="h-9 w-9">
               <Heart className="h-5 w-5" />
             </Button>
+
             {wishlistItems.length > 0 && (
               <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
                 {wishlistItems.length}
@@ -177,6 +187,7 @@ export default function Header() {
             <Button variant="ghost" size="icon" className="h-9 w-9">
               <ShoppingBag className="h-5 w-5" />
             </Button>
+
             {tongSoLuong > 0 && (
               <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
                 {tongSoLuong}

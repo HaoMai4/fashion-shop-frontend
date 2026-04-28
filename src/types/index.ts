@@ -27,6 +27,11 @@ export interface SanPham {
   bienThe?: BienTheSanPhamDetail[];
   colorSizeMap?: Record<string, string[]>;
   hinhAnhList?: string[];
+  variants?: any[];
+  defaultVariantId?: string;
+  defaultColor?: string;
+  defaultSize?: string;
+  defaultPrice?: number;
 }
 
 export interface MauSac {
