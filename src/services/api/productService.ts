@@ -239,7 +239,9 @@ function applyLocalFilters(products: SanPham[], filter?: ProductFilter) {
         break;
 
       case "ban_chay":
-        result.sort((a, b) => (b.daBan || 0) - (a.daBan || 0));
+        result = result
+          .filter((product) => (product.daBan || 0) > 0)
+          .sort((a, b) => (b.daBan || 0) - (a.daBan || 0));
         break;
     }
   }
@@ -310,19 +312,19 @@ function mapBackendProductToSanPham(p: any): SanPham {
 
   const colorVariantColors: ProductColorOption[] = Array.isArray(p.colorVariants)
     ? p.colorVariants
-        .map((v: any): ProductColorOption | null => {
-          const ten = typeof v.color === "string" ? v.color.trim() : "";
-          if (!ten) return null;
+      .map((v: any): ProductColorOption | null => {
+        const ten = typeof v.color === "string" ? v.color.trim() : "";
+        if (!ten) return null;
 
-          return {
-            ten,
-            ma:
-              typeof v.colorCode === "string" && v.colorCode.trim()
-                ? v.colorCode
-                : "#000000",
-          };
-        })
-        .filter((c): c is ProductColorOption => c !== null)
+        return {
+          ten,
+          ma:
+            typeof v.colorCode === "string" && v.colorCode.trim()
+              ? v.colorCode
+              : "#000000",
+        };
+      })
+      .filter((c): c is ProductColorOption => c !== null)
     : [];
 
   const colors = Array.from(
@@ -335,14 +337,14 @@ function mapBackendProductToSanPham(p: any): SanPham {
     Array.isArray(p.availableSizes) && p.availableSizes.length > 0
       ? p.availableSizes
       : Array.from(
-          new Set(
-            variants.flatMap((variant: any) =>
-              Array.isArray(variant?.sizes)
-                ? variant.sizes.map((s: any) => s.size).filter(Boolean)
-                : []
-            )
+        new Set(
+          variants.flatMap((variant: any) =>
+            Array.isArray(variant?.sizes)
+              ? variant.sizes.map((s: any) => s.size).filter(Boolean)
+              : []
           )
-        );
+        )
+      );
 
   const genderRaw =
     p.gender ||
@@ -406,17 +408,17 @@ function mapBackendProductToSanPham(p: any): SanPham {
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => ({
-            size: s.size,
-            price: s.price,
-            discountPrice: s.discountPrice,
-            finalPrice:
-              typeof s.finalPrice === "number"
-                ? s.finalPrice
-                : s.discountPrice && s.discountPrice > 0
-                  ? s.discountPrice
-                  : s.price,
-            stock: s.stock || 0,
-          }))
+          size: s.size,
+          price: s.price,
+          discountPrice: s.discountPrice,
+          finalPrice:
+            typeof s.finalPrice === "number"
+              ? s.finalPrice
+              : s.discountPrice && s.discountPrice > 0
+                ? s.discountPrice
+                : s.price,
+          stock: s.stock || 0,
+        }))
         : [],
     })),
   } as SanPham;
@@ -533,17 +535,17 @@ function mapProductDetailToSanPham(p: any): SanPham {
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => ({
-            size: s.size,
-            price: s.price,
-            discountPrice: s.discountPrice,
-            finalPrice:
-              typeof s.finalPrice === "number"
-                ? s.finalPrice
-                : s.discountPrice && s.discountPrice > 0
-                  ? s.discountPrice
-                  : s.price,
-            stock: s.stock || 0,
-          }))
+          size: s.size,
+          price: s.price,
+          discountPrice: s.discountPrice,
+          finalPrice:
+            typeof s.finalPrice === "number"
+              ? s.finalPrice
+              : s.discountPrice && s.discountPrice > 0
+                ? s.discountPrice
+                : s.price,
+          stock: s.stock || 0,
+        }))
         : [],
     })),
 
@@ -639,7 +641,16 @@ function buildVariantFormData(payload: UpdateAdminVariantPayload) {
 
 export const productService = {
   async getAll(filter?: ProductFilter): Promise<SanPham[]> {
-    const res = await apiRequest<{ data?: any[]; products?: any[] }>("/api/products/all");
+    if (filter?.sapXep === "ban_chay") {
+      const { sapXep, ...restFilter } = filter;
+      const bestSellers = await productService.getBestSellers(50);
+
+      return applyLocalFilters(bestSellers, restFilter);
+    }
+
+    const res = await apiRequest<{ data?: any[]; products?: any[] }>(
+      "/api/products/all?limit=100"
+    );
 
     const rawProducts = Array.isArray(res.data)
       ? res.data
@@ -660,28 +671,34 @@ export const productService = {
     return mapProductDetailToSanPham(res);
   },
 
-  async getFeatured(): Promise<SanPham[]> {
+  async getFeatured(limit = 10): Promise<SanPham[]> {
     const res = await apiRequest<{ products: BackendProduct[] }>(
-      "/api/products/best-sellers?limit=8"
+      `/api/products/best-sellers?limit=${limit}`
     );
+
     return (res.products || []).map(mapBackendProductToSanPham);
   },
 
-  async getNewArrivals(): Promise<SanPham[]> {
-    const res = await apiRequest<{ products: BackendProduct[] }>("/api/products/new?limit=8");
-    return (res.products || []).map(mapBackendProductToSanPham);
-  },
-
-  async getBestSellers(): Promise<SanPham[]> {
+  async getNewArrivals(limit = 10): Promise<SanPham[]> {
     const res = await apiRequest<{ products: BackendProduct[] }>(
-      "/api/products/best-sellers?limit=8"
+      `/api/products/new?limit=${limit}`
     );
+
     return (res.products || []).map(mapBackendProductToSanPham);
   },
 
-  async getSaleItems(): Promise<SanPham[]> {
+  async getBestSellers(limit = 10): Promise<SanPham[]> {
+    const res = await apiRequest<{ products: BackendProduct[] }>(
+      `/api/products/best-sellers?limit=${limit}`
+    );
+
+    return (res.products || []).map(mapBackendProductToSanPham);
+  },
+
+  async getSaleItems(limit = 10): Promise<SanPham[]> {
     const saleItems = await productService.getAll({ khuyenMai: true });
-    return saleItems.slice(0, 8);
+
+    return saleItems.slice(0, limit);
   },
 
   async search(query: string): Promise<SanPham[]> {

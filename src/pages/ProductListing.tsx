@@ -50,11 +50,20 @@ function parseFilterFromSearchParams(searchParams: URLSearchParams): ProductFilt
   const danhMuc = searchParams.get('danhMuc');
   const khuyenMai = searchParams.get('khuyenMai');
   const timKiem = searchParams.get('timKiem');
+  const sort = searchParams.get('sort');
 
   if (gioiTinh) nextFilter.gioiTinh = gioiTinh;
   if (danhMuc) nextFilter.danhMuc = danhMuc;
   if (khuyenMai === 'true') nextFilter.khuyenMai = true;
   if (timKiem) nextFilter.timKiem = timKiem;
+
+  if (sort === 'bestseller') {
+    nextFilter.sapXep = 'ban_chay';
+  }
+
+  if (sort === 'newest') {
+    nextFilter.sapXep = 'moi_nhat';
+  }
 
   return nextFilter;
 }
@@ -66,8 +75,25 @@ function getTitle(filter: ProductFilter) {
   if (filter.gioiTinh === 'unisex') return 'Thời trang Unisex';
   if (filter.timKiem) return `Kết quả tìm kiếm: "${filter.timKiem}"`;
   if (filter.khuyenMai) return 'Sản phẩm đang sale';
+  if (filter.sapXep === 'ban_chay') return 'Sản phẩm bán chạy';
+  if (filter.sapXep === 'moi_nhat') return 'Sản phẩm mới về';
 
   return 'Tất cả sản phẩm';
+}
+
+function getSortLabel(sort?: ProductFilter['sapXep']) {
+  switch (sort) {
+    case 'ban_chay':
+      return 'Bán chạy';
+    case 'moi_nhat':
+      return 'Mới nhất';
+    case 'gia_tang':
+      return 'Giá tăng dần';
+    case 'gia_giam':
+      return 'Giá giảm dần';
+    default:
+      return '';
+  }
 }
 
 function getDefaultCartInfo(product: any) {
@@ -419,6 +445,7 @@ export default function ProductListing() {
             {(filter.danhMuc ||
               filter.gioiTinh ||
               filter.khuyenMai ||
+              filter.sapXep ||
               filter.mauSac?.length ||
               filter.kichCo?.length ||
               filter.giaMin !== undefined ||
@@ -448,6 +475,13 @@ export default function ProductListing() {
                   <Badge
                     filter="Đang sale"
                     onRemove={() => setFilter({ ...filter, khuyenMai: undefined })}
+                  />
+                )}
+
+                {filter.sapXep && (
+                  <Badge
+                    filter={getSortLabel(filter.sapXep)}
+                    onRemove={() => setFilter({ ...filter, sapXep: undefined })}
                   />
                 )}
               </div>
