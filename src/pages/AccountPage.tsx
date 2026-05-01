@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
@@ -10,14 +11,19 @@ import {
   Briefcase,
   ShieldCheck,
   ShoppingBag,
+  Save,
+  Loader2,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import {
   clearAuth,
   getStoredUser,
   getMe,
+  updateMe,
   isLoggedIn,
   type UserProfile,
 } from '@/services/api/userService';
@@ -25,8 +31,16 @@ import {
 type MenuItem = {
   key: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   action: () => void;
+};
+
+type ProfileForm = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  gender: string;
+  dateOfBirth: string;
 };
 
 function normalizeRole(role?: string) {
@@ -41,10 +55,50 @@ function getRoleLabel(role?: string) {
   return 'Thành viên';
 }
 
+function getGenderLabel(gender?: string) {
+  const normalized = String(gender || '').trim().toLowerCase();
+
+  if (normalized === 'nam' || normalized === 'male') return 'Nam';
+  if (normalized === 'nu' || normalized === 'female') return 'Nữ';
+  if (normalized === 'khac' || normalized === 'other') return 'Khác';
+  return 'Chưa cập nhật';
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return 'Chưa cập nhật';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Chưa cập nhật';
+
+  return date.toLocaleDateString('vi-VN');
+}
+
+function buildFormFromUser(user?: UserProfile | null): ProfileForm {
+  return {
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+    phone: user?.phone || user?.sdt || '',
+    gender: user?.gender || '',
+    dateOfBirth: toDateInputValue(user?.dateOfBirth),
+  };
+}
+
 export default function AccountPage() {
   const navigate = useNavigate();
+
   const [user, setUser] = useState<UserProfile | null>(getStoredUser());
+  const [form, setForm] = useState<ProfileForm>(() => buildFormFromUser(getStoredUser()));
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -56,6 +110,7 @@ export default function AccountPage() {
       try {
         const profile = await getMe();
         setUser(profile);
+        setForm(buildFormFromUser(profile));
       } catch (error: any) {
         clearAuth();
         toast.error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
@@ -74,14 +129,59 @@ export default function AccountPage() {
     navigate('/dang-nhap');
   };
 
+  const handleChange = (field: keyof ProfileForm, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleSaveProfile = async () => {
+    const firstName = form.firstName.trim();
+    const lastName = form.lastName.trim();
+    const phone = form.phone.trim();
+
+    if (!firstName) {
+      toast.error('Vui lòng nhập họ và tên đệm');
+      return;
+    }
+
+    if (!lastName) {
+      toast.error('Vui lòng nhập tên');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const updatedUser = await updateMe({
+        firstName,
+        lastName,
+        phone,
+        gender: form.gender,
+        dateOfBirth: form.dateOfBirth || null,
+      });
+
+      setUser(updatedUser);
+      setForm(buildFormFromUser(updatedUser));
+
+      window.dispatchEvent(new Event('stylehub_user_updated'));
+      toast.success('Đã cập nhật thông tin tài khoản');
+    } catch (error: any) {
+      toast.error(error?.message || 'Không thể cập nhật thông tin tài khoản');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const fullName =
     user?.hoTen ||
     [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
     'Khách hàng';
 
   const email = user?.email || 'Chưa cập nhật';
-  const phone = user?.sdt || user?.phone || 'Chưa cập nhật';
-  const joinedDate = 'Chưa cập nhật';
+  const phone = user?.phone || user?.sdt || 'Chưa cập nhật';
+  const joinedDate = formatDate(user?.createdAt);
   const role = normalizeRole(user?.role);
   const isAdmin = role === 'admin';
 
@@ -117,7 +217,7 @@ export default function AccountPage() {
         label: 'Sản phẩm yêu thích',
         icon: <Heart className="h-5 w-5 text-slate-500" />,
         action: () => {
-          toast.info('Phần sản phẩm yêu thích sẽ làm ở bước sau');
+          navigate('/yeu-thich');
         },
       },
       {
@@ -178,7 +278,9 @@ export default function AccountPage() {
           <div className="mx-auto max-w-xl rounded-2xl border bg-white p-6 shadow-sm">
             <h1 className="mb-2 text-2xl font-bold">Tài khoản</h1>
             <p className="mb-4 text-muted-foreground">Bạn chưa đăng nhập.</p>
-            <Button onClick={() => navigate('/dang-nhap')}>Đi đến đăng nhập</Button>
+            <Button onClick={() => navigate('/dang-nhap')}>
+              Đi đến đăng nhập
+            </Button>
           </div>
         </div>
       </MainLayout>
@@ -187,11 +289,11 @@ export default function AccountPage() {
 
   return (
     <MainLayout>
-      <div className="container mx-auto max-w-3xl px-4 py-8">
+      <div className="container mx-auto max-w-5xl px-4 py-8">
         <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-2xl font-bold text-blue-600">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-100 text-2xl font-bold text-blue-600">
                 {fullName.charAt(0).toUpperCase()}
               </div>
 
@@ -216,7 +318,7 @@ export default function AccountPage() {
               <div>
                 <p className="font-semibold text-blue-700">Tài khoản quản trị</p>
                 <p className="text-sm text-blue-600">
-                  Bạn có thể vào khu vực quản trị để quản lý đơn hàng.
+                  Bạn có thể vào khu vực quản trị để quản lý hệ thống.
                 </p>
               </div>
 
@@ -232,59 +334,150 @@ export default function AccountPage() {
           </div>
         ) : null}
 
-        <div className="mb-6 space-y-3">
-          {menuItems.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={item.action}
-              className="flex w-full items-center justify-between rounded-xl border bg-white px-5 py-4 text-left shadow-sm transition hover:bg-slate-50"
-            >
-              <div className="flex items-center gap-3">
-                {item.icon}
-                <span className="font-medium">{item.label}</span>
+        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+          <div className="space-y-3">
+            {menuItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={item.action}
+                className="flex w-full items-center justify-between rounded-xl border bg-white px-5 py-4 text-left shadow-sm transition hover:bg-slate-50"
+              >
+                <div className="flex items-center gap-3">
+                  {item.icon}
+                  <span className="font-medium">{item.label}</span>
+                </div>
+
+                <ChevronRight className="h-5 w-5 text-slate-400" />
+              </button>
+            ))}
+          </div>
+
+          <div
+            id="profile-info"
+            className="rounded-2xl border bg-white p-6 shadow-sm"
+          >
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Thông tin cá nhân</h2>
+                <p className="text-sm text-muted-foreground">
+                  Cập nhật thông tin cơ bản dùng cho tài khoản và đơn hàng.
+                </p>
               </div>
 
-              <ChevronRight className="h-5 w-5 text-slate-400" />
-            </button>
-          ))}
-        </div>
-
-        <div
-          id="profile-info"
-          className="rounded-2xl border bg-white p-6 shadow-sm"
-        >
-          <h2 className="mb-5 text-2xl font-bold">Thông tin cá nhân</h2>
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div>
-              <p className="text-sm text-muted-foreground">Họ tên</p>
-              <p className="font-medium">{fullName}</p>
+              <Button onClick={handleSaveProfile} disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang lưu
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Lưu thay đổi
+                  </>
+                )}
+              </Button>
             </div>
 
-            <div>
-              <p className="text-sm text-muted-foreground">Email</p>
-              <p className="font-medium">{email}</p>
-            </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="firstName">Họ và tên đệm</Label>
+                <Input
+                  id="firstName"
+                  value={form.firstName}
+                  onChange={(event) => handleChange('firstName', event.target.value)}
+                  placeholder="Ví dụ: Mai Nhật"
+                />
+              </div>
 
-            <div>
-              <p className="text-sm text-muted-foreground">Số điện thoại</p>
-              <p className="font-medium">{phone}</p>
-            </div>
+              <div>
+                <Label htmlFor="lastName">Tên</Label>
+                <Input
+                  id="lastName"
+                  value={form.lastName}
+                  onChange={(event) => handleChange('lastName', event.target.value)}
+                  placeholder="Ví dụ: Hào"
+                />
+              </div>
 
-            <div>
-              <p className="text-sm text-muted-foreground">Ngày tham gia</p>
-              <p className="font-medium">{joinedDate}</p>
-            </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  value={email}
+                  disabled
+                  className="bg-slate-50"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Email dùng để đăng nhập nên không chỉnh sửa tại đây.
+                </p>
+              </div>
 
-            <div>
-              <p className="text-sm text-muted-foreground">Vai trò</p>
-              <p className="font-medium">{getRoleLabel(user.role)}</p>
-            </div>
+              <div>
+                <Label htmlFor="phone">Số điện thoại</Label>
+                <Input
+                  id="phone"
+                  value={form.phone}
+                  onChange={(event) => handleChange('phone', event.target.value)}
+                  placeholder="Ví dụ: 0909123456"
+                />
+              </div>
 
-            <div className="sm:col-span-2">
-              <p className="text-sm text-muted-foreground">Địa chỉ</p>
-              <p className="font-medium">{user.diaChi || user.address || 'Chưa cập nhật'}</p>
+              <div>
+                <Label htmlFor="gender">Giới tính</Label>
+                <select
+                  id="gender"
+                  value={form.gender}
+                  onChange={(event) => handleChange('gender', event.target.value)}
+                  className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">Chưa cập nhật</option>
+                  <option value="nam">Nam</option>
+                  <option value="nu">Nữ</option>
+                  <option value="khac">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="dateOfBirth">Ngày sinh</Label>
+                <Input
+                  id="dateOfBirth"
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={(event) => handleChange('dateOfBirth', event.target.value)}
+                />
+              </div>
+
+              <div>
+                <p className="text-sm text-muted-foreground">Ngày tham gia</p>
+                <p className="font-medium">{joinedDate}</p>
+              </div>
+
+              <div>
+                <p className="text-sm text-muted-foreground">Vai trò</p>
+                <p className="font-medium">{getRoleLabel(user.role)}</p>
+              </div>
+
+              <div>
+                <p className="text-sm text-muted-foreground">Giới tính hiện tại</p>
+                <p className="font-medium">{getGenderLabel(user.gender)}</p>
+              </div>
+
+              <div>
+                <p className="text-sm text-muted-foreground">Ngày sinh hiện tại</p>
+                <p className="font-medium">{formatDate(user.dateOfBirth)}</p>
+              </div>
+
+              <div className="sm:col-span-2">
+                <p className="text-sm text-muted-foreground">Địa chỉ</p>
+                <p className="font-medium">
+                  {user.diaChi || user.address || 'Chưa cập nhật'}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Phần quản lý địa chỉ giao hàng sẽ làm ở module riêng.
+                </p>
+              </div>
             </div>
           </div>
         </div>

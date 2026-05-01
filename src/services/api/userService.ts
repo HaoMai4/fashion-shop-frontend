@@ -19,6 +19,10 @@ export interface UserProfile {
   avatar?: string;
   diaChi?: string;
   address?: string;
+  gender?: string;
+  dateOfBirth?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface LoginPayload {
@@ -79,6 +83,10 @@ function normalizeUser(raw: any): UserProfile {
     avatar: raw.avatar,
     diaChi: raw.diaChi || raw.address,
     address: raw.address || raw.diaChi,
+    gender: raw.gender,
+    dateOfBirth: raw.dateOfBirth,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
   };
 }
 
