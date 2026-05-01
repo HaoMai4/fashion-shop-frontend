@@ -6,7 +6,6 @@ import {
   MapPin,
   Heart,
   Package,
-  User,
   Award,
   Briefcase,
   ShieldCheck,
@@ -24,8 +23,10 @@ import {
   getStoredUser,
   getMe,
   updateMe,
+  getAddresses,
   isLoggedIn,
   type UserProfile,
+  type UserAddress,
 } from '@/services/api/userService';
 
 type MenuItem = {
@@ -82,6 +83,21 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString('vi-VN');
 }
 
+function formatAddress(address?: UserAddress | null) {
+  if (!address) return 'Chưa cập nhật';
+
+  const fullAddress = [
+    address.addressLine,
+    address.ward,
+    address.district,
+    address.city,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  return fullAddress || 'Chưa cập nhật';
+}
+
 function buildFormFromUser(user?: UserProfile | null): ProfileForm {
   return {
     firstName: user?.firstName || '',
@@ -96,6 +112,7 @@ export default function AccountPage() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState<UserProfile | null>(getStoredUser());
+  const [defaultAddress, setDefaultAddress] = useState<UserAddress | null>(null);
   const [form, setForm] = useState<ProfileForm>(() => buildFormFromUser(getStoredUser()));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -111,6 +128,16 @@ export default function AccountPage() {
         const profile = await getMe();
         setUser(profile);
         setForm(buildFormFromUser(profile));
+
+        try {
+          const addressList = await getAddresses();
+          const mainAddress =
+            addressList.find((item) => item.isDefault) || addressList[0] || null;
+          setDefaultAddress(mainAddress);
+        } catch (addressError) {
+          console.error('Load default address error:', addressError);
+          setDefaultAddress(null);
+        }
       } catch (error: any) {
         clearAuth();
         toast.error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
@@ -180,7 +207,6 @@ export default function AccountPage() {
     'Khách hàng';
 
   const email = user?.email || 'Chưa cập nhật';
-  const phone = user?.phone || user?.sdt || 'Chưa cập nhật';
   const joinedDate = formatDate(user?.createdAt);
   const role = normalizeRole(user?.role);
   const isAdmin = role === 'admin';
@@ -188,20 +214,11 @@ export default function AccountPage() {
   const menuItems: MenuItem[] = useMemo(() => {
     const baseItems: MenuItem[] = [
       {
-        key: 'profile',
-        label: 'Thông tin cá nhân',
-        icon: <User className="h-5 w-5 text-slate-500" />,
-        action: () => {
-          const section = document.getElementById('profile-info');
-          section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        },
-      },
-      {
         key: 'address',
         label: 'Địa chỉ giao hàng',
         icon: <MapPin className="h-5 w-5 text-slate-500" />,
         action: () => {
-          toast.info('Phần địa chỉ giao hàng sẽ làm ở bước sau');
+          navigate('/dia-chi');
         },
       },
       {
@@ -239,7 +256,7 @@ export default function AccountPage() {
     ];
 
     if (isAdmin) {
-      baseItems.splice(3, 0, {
+      baseItems.splice(2, 0, {
         key: 'admin',
         label: 'Quản trị hệ thống',
         icon: <ShieldCheck className="h-5 w-5 text-blue-600" />,
@@ -248,7 +265,7 @@ export default function AccountPage() {
         },
       });
 
-      baseItems.splice(4, 0, {
+      baseItems.splice(3, 0, {
         key: 'admin-orders',
         label: 'Quản lý đơn hàng',
         icon: <ShoppingBag className="h-5 w-5 text-blue-600" />,
@@ -470,13 +487,20 @@ export default function AccountPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <p className="text-sm text-muted-foreground">Địa chỉ</p>
-                <p className="font-medium">
-                  {user.diaChi || user.address || 'Chưa cập nhật'}
-                </p>
+                <p className="text-sm text-muted-foreground">Địa chỉ mặc định</p>
+                <p className="font-medium">{formatAddress(defaultAddress)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Phần quản lý địa chỉ giao hàng sẽ làm ở module riêng.
+                  Địa chỉ mặc định dùng cho quá trình thanh toán.
                 </p>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => navigate('/dia-chi')}
+                >
+                  Quản lý địa chỉ giao hàng
+                </Button>
               </div>
             </div>
           </div>

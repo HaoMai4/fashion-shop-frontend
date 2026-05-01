@@ -1,6 +1,6 @@
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { CheckCircle, ArrowLeft } from 'lucide-react';
+import { CheckCircle, ArrowLeft, MapPin, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,12 @@ import { useCart } from '@/hooks/useCart';
 import { formatPrice } from '@/utils/format';
 import { toast } from 'sonner';
 import { orderService, type CreateOrderPayload } from '@/services/api/orderService';
+import {
+  getAddresses,
+  getStoredUser,
+  isLoggedIn,
+  type UserAddress,
+} from '@/services/api/userService';
 import type { ChiTietGioHang } from '@/types';
 
 const BUY_NOW_STORAGE_KEY = 'matewear_buy_now';
@@ -41,14 +47,47 @@ type BuyNowItem = {
 
 type CheckoutDisplayItem = ChiTietGioHang | BuyNowItem;
 
+function getAddressId(address: UserAddress) {
+  return address._id || address.id || '';
+}
+
+function formatAddress(address?: UserAddress | null) {
+  if (!address) return '';
+
+  return [
+    address.addressLine,
+    address.ward,
+    address.district,
+    address.city,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function getCustomerNameFromAddress(address?: UserAddress | null) {
+  return address?.receiverName || '';
+}
+
+function getCustomerPhoneFromAddress(address?: UserAddress | null) {
+  return address?.phone || '';
+}
+
 export default function CheckoutPage() {
   const location = useLocation();
   const { items, clearCart } = useCart();
+
+  const loggedIn = isLoggedIn();
+  const storedUser = getStoredUser();
 
   const [step, setStep] = useState<'form' | 'success'>('form');
   const [shipping, setShipping] = useState<'standard' | 'express'>('standard');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderCode, setOrderCode] = useState('');
+
+  const [addresses, setAddresses] = useState<UserAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+  const [addressLoading, setAddressLoading] = useState(false);
+
   const [form, setForm] = useState<CheckoutForm>({
     hoTen: '',
     sdt: '',
@@ -56,6 +95,33 @@ export default function CheckoutPage() {
     diaChi: '',
     ghiChu: '',
   });
+
+  useEffect(() => {
+    const loadSavedAddresses = async () => {
+      if (!loggedIn) {
+        return;
+      }
+
+      try {
+        setAddressLoading(true);
+
+        const data = await getAddresses();
+        setAddresses(data);
+
+        const defaultAddress = data.find((item) => item.isDefault) || data[0];
+
+        if (defaultAddress) {
+          setSelectedAddressId(getAddressId(defaultAddress));
+        }
+      } catch (error: any) {
+        toast.error(error?.message || 'Không thể tải địa chỉ giao hàng');
+      } finally {
+        setAddressLoading(false);
+      }
+    };
+
+    loadSavedAddresses();
+  }, [loggedIn]);
 
   const mode = useMemo(() => {
     const queryMode = new URLSearchParams(location.search).get('mode');
@@ -84,6 +150,10 @@ export default function CheckoutPage() {
 
   const checkoutItems: CheckoutDisplayItem[] =
     mode === 'buy-now' ? (buyNowItem ? [buyNowItem] : []) : items;
+
+  const selectedAddress = useMemo(() => {
+    return addresses.find((address) => getAddressId(address) === selectedAddressId) || null;
+  }, [addresses, selectedAddressId]);
 
   const subtotal = useMemo(() => {
     return checkoutItems.reduce((sum, item) => sum + item.gia * item.soLuong, 0);
@@ -115,7 +185,65 @@ export default function CheckoutPage() {
   const backLabel =
     mode === 'buy-now' ? 'Quay lại sản phẩm' : 'Quay lại giỏ hàng';
 
-  const validateForm = () => {
+  const validateItems = () => {
+    if (checkoutItems.length === 0) {
+      toast.error(
+        mode === 'buy-now' ? 'Không có sản phẩm mua ngay' : 'Giỏ hàng đang trống'
+      );
+      return false;
+    }
+
+    const invalidItem = checkoutItems.find(
+      (item) =>
+        !item.productId ||
+        !item.variantId ||
+        !item.kichCo ||
+        item.soLuong <= 0
+    );
+
+    if (invalidItem) {
+      toast.error('Có sản phẩm chưa đủ dữ liệu biến thể');
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateLoggedInCheckout = () => {
+    if (addressLoading) {
+      toast.error('Đang tải địa chỉ giao hàng, vui lòng thử lại');
+      return false;
+    }
+
+    if (addresses.length === 0) {
+      toast.error('Vui lòng thêm địa chỉ giao hàng trước khi đặt hàng');
+      return false;
+    }
+
+    if (!selectedAddress) {
+      toast.error('Vui lòng chọn địa chỉ giao hàng');
+      return false;
+    }
+
+    if (!selectedAddress.receiverName?.trim()) {
+      toast.error('Địa chỉ giao hàng thiếu tên người nhận');
+      return false;
+    }
+
+    if (!selectedAddress.phone?.trim()) {
+      toast.error('Địa chỉ giao hàng thiếu số điện thoại');
+      return false;
+    }
+
+    if (!formatAddress(selectedAddress)) {
+      toast.error('Địa chỉ giao hàng chưa đầy đủ');
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateGuestCheckout = () => {
     const hoTen = form.hoTen.trim();
     const sdt = form.sdt.trim();
     const email = form.email.trim();
@@ -151,27 +279,17 @@ export default function CheckoutPage() {
       return false;
     }
 
-    if (checkoutItems.length === 0) {
-      toast.error(
-        mode === 'buy-now' ? 'Không có sản phẩm mua ngay' : 'Giỏ hàng đang trống'
-      );
-      return false;
-    }
-
-    const invalidItem = checkoutItems.find(
-      (item) =>
-        !item.productId ||
-        !item.variantId ||
-        !item.kichCo ||
-        item.soLuong <= 0
-    );
-
-    if (invalidItem) {
-      toast.error('Có sản phẩm chưa đủ dữ liệu biến thể');
-      return false;
-    }
-
     return true;
+  };
+
+  const validateForm = () => {
+    if (!validateItems()) return false;
+
+    if (loggedIn) {
+      return validateLoggedInCheckout();
+    }
+
+    return validateGuestCheckout();
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -183,6 +301,22 @@ export default function CheckoutPage() {
     try {
       setIsSubmitting(true);
 
+      const shippingFullName = loggedIn
+        ? getCustomerNameFromAddress(selectedAddress)
+        : form.hoTen.trim();
+
+      const shippingPhone = loggedIn
+        ? getCustomerPhoneFromAddress(selectedAddress)
+        : form.sdt.trim();
+
+      const shippingEmail = loggedIn
+        ? storedUser?.email || ''
+        : form.email.trim();
+
+      const shippingAddressText = loggedIn
+        ? formatAddress(selectedAddress)
+        : form.diaChi.trim();
+
       const payload: CreateOrderPayload & { shippingFee: number } = {
         items: checkoutItems.map((item) => ({
           productId: item.productId,
@@ -191,19 +325,19 @@ export default function CheckoutPage() {
           quantity: item.soLuong,
         })),
         shippingAddress: {
-          fullName: form.hoTen.trim(),
-          phone: form.sdt.trim(),
-          email: form.email.trim(),
-          addressLine1: form.diaChi.trim(),
+          fullName: shippingFullName,
+          phone: shippingPhone,
+          email: shippingEmail,
+          addressLine1: shippingAddressText,
         },
         paymentMethod: {
           type: 'COD',
           note: 'Thanh toán khi nhận hàng',
         },
         guestInfo: {
-          fullName: form.hoTen.trim(),
-          email: form.email.trim(),
-          phone: form.sdt.trim(),
+          fullName: shippingFullName,
+          email: shippingEmail,
+          phone: shippingPhone,
         },
         customerNote: form.ghiChu.trim(),
         shippingFee,
@@ -293,50 +427,143 @@ export default function CheckoutPage() {
         <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-5">
           <div className="space-y-6 lg:col-span-3">
             <div className="space-y-4 rounded-xl border border-border p-5">
-              <h2 className="font-semibold">Thông tin giao hàng</h2>
-
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <Label className="text-xs">Họ tên *</Label>
-                  <Input
-                    required
-                    value={form.hoTen}
-                    onChange={handleChange('hoTen')}
-                    placeholder="Nguyễn Văn A"
-                  />
+                  <h2 className="font-semibold">Thông tin giao hàng</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {loggedIn
+                      ? 'Chọn địa chỉ đã lưu trong tài khoản của bạn.'
+                      : 'Nhập thông tin giao hàng cho đơn hàng khách.'}
+                  </p>
                 </div>
 
-                <div>
-                  <Label className="text-xs">Số điện thoại *</Label>
-                  <Input
-                    required
-                    value={form.sdt}
-                    onChange={handleChange('sdt')}
-                    placeholder="0901234567"
-                  />
+                {loggedIn ? (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/dia-chi">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Thêm địa chỉ
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+
+              {loggedIn ? (
+                <div className="space-y-3">
+                  {addressLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Đang tải địa chỉ giao hàng...
+                    </p>
+                  ) : addresses.length === 0 ? (
+                    <div className="rounded-xl border border-dashed p-5 text-center">
+                      <MapPin className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                      <p className="font-medium">Bạn chưa có địa chỉ giao hàng</p>
+                      <p className="mb-4 text-sm text-muted-foreground">
+                        Thêm địa chỉ để tiếp tục đặt hàng.
+                      </p>
+                      <Button asChild>
+                        <Link to="/dia-chi">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Thêm địa chỉ mới
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <RadioGroup
+                      value={selectedAddressId}
+                      onValueChange={setSelectedAddressId}
+                      className="space-y-3"
+                    >
+                      {addresses.map((address) => {
+                        const addressId = getAddressId(address);
+                        const selected = selectedAddressId === addressId;
+
+                        return (
+                          <label
+                            key={addressId}
+                            className={`flex cursor-pointer gap-3 rounded-xl border p-4 transition ${
+                              selected
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:bg-secondary/50'
+                            }`}
+                          >
+                            <RadioGroupItem value={addressId} className="mt-1" />
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-semibold">
+                                  {address.receiverName}
+                                </p>
+
+                                {address.isDefault ? (
+                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                    Mặc định
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                Số điện thoại:{' '}
+                                <span className="text-foreground">
+                                  {address.phone}
+                                </span>
+                              </p>
+
+                              <p className="mt-1 text-sm">
+                                {formatAddress(address)}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </RadioGroup>
+                  )}
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <Label className="text-xs">Họ tên *</Label>
+                      <Input
+                        required
+                        value={form.hoTen}
+                        onChange={handleChange('hoTen')}
+                        placeholder="Nguyễn Văn A"
+                      />
+                    </div>
 
-              <div>
-                <Label className="text-xs">Email *</Label>
-                <Input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange('email')}
-                  placeholder="email@example.com"
-                />
-              </div>
+                    <div>
+                      <Label className="text-xs">Số điện thoại *</Label>
+                      <Input
+                        required
+                        value={form.sdt}
+                        onChange={handleChange('sdt')}
+                        placeholder="0901234567"
+                      />
+                    </div>
+                  </div>
 
-              <div>
-                <Label className="text-xs">Địa chỉ giao hàng *</Label>
-                <Input
-                  required
-                  value={form.diaChi}
-                  onChange={handleChange('diaChi')}
-                  placeholder="123 Nguyễn Huệ, Quận 1, TP.HCM"
-                />
-              </div>
+                  <div>
+                    <Label className="text-xs">Email *</Label>
+                    <Input
+                      required
+                      type="email"
+                      value={form.email}
+                      onChange={handleChange('email')}
+                      placeholder="email@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">Địa chỉ giao hàng *</Label>
+                    <Input
+                      required
+                      value={form.diaChi}
+                      onChange={handleChange('diaChi')}
+                      placeholder="123 Nguyễn Huệ, Quận 1, TP.HCM"
+                    />
+                  </div>
+                </>
+              )}
 
               <div>
                 <Label className="text-xs">Ghi chú</Label>
@@ -459,7 +686,7 @@ export default function CheckoutPage() {
                 type="submit"
                 size="lg"
                 className="w-full"
-                disabled={isSubmitting}
+                disabled={isSubmitting || addressLoading}
               >
                 {isSubmitting ? 'Đang đặt hàng...' : 'Đặt hàng'}
               </Button>

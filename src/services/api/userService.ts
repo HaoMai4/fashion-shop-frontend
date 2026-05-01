@@ -229,6 +229,103 @@ export async function updateMe(payload: Partial<UserProfile>): Promise<UserProfi
 }
 
 // =========================
+// Address
+// =========================
+export interface UserAddress {
+  _id?: string;
+  id?: string;
+  receiverName: string;
+  phone: string;
+  addressLine: string;
+  city: string;
+  district: string;
+  ward: string;
+  isDefault?: boolean;
+}
+
+export type AddressPayload = {
+  receiverName: string;
+  phone: string;
+  addressLine: string;
+  city: string;
+  district: string;
+  ward: string;
+  isDefault?: boolean;
+};
+
+function normalizeAddress(raw: any): UserAddress {
+  return {
+    _id: raw?._id || raw?.id,
+    id: raw?.id || raw?._id,
+    receiverName: raw?.receiverName || '',
+    phone: raw?.phone || '',
+    addressLine: raw?.addressLine || '',
+    city: raw?.city || '',
+    district: raw?.district || '',
+    ward: raw?.ward || '',
+    isDefault: !!raw?.isDefault,
+  };
+}
+
+function extractAddresses(raw: any): UserAddress[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : raw?.addresses || raw?.data || raw?.items || [];
+
+  return Array.isArray(list) ? list.map(normalizeAddress) : [];
+}
+
+export async function getAddresses(): Promise<UserAddress[]> {
+  const raw = await apiRequest<any>(buildPath('/address'), {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  return extractAddresses(raw);
+}
+
+export async function addAddress(payload: AddressPayload): Promise<UserAddress[]> {
+  const raw = await apiRequest<any>(buildPath('/address'), {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  return extractAddresses(raw);
+}
+
+export async function updateAddress(
+  addressId: string,
+  payload: AddressPayload
+): Promise<UserAddress[]> {
+  const raw = await apiRequest<any>(buildPath(`/address/${addressId}`), {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  return extractAddresses(raw);
+}
+
+export async function deleteAddress(addressId: string): Promise<UserAddress[]> {
+  const raw = await apiRequest<any>(buildPath(`/address/${addressId}`), {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  return extractAddresses(raw);
+}
+
+export async function setDefaultAddress(addressId: string): Promise<UserAddress[]> {
+  const raw = await apiRequest<any>(buildPath(`/address/${addressId}/default`), {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+  });
+
+  return extractAddresses(raw);
+}
+
+// =========================
 // Wishlist
 // =========================
 export async function getWishlist(): Promise<any[]> {
