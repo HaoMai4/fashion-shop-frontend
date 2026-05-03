@@ -2,6 +2,7 @@ import { apiRequest } from './apiClient';
 
 export interface ReviewUser {
   _id?: string;
+  id?: string;
   firstName?: string;
   lastName?: string;
   avatar?: string;
@@ -63,6 +64,20 @@ export const reviewService = {
       `/api/products/${productId}/reviews`,
       {
         method: 'POST',
+        auth: true,
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  updateReview: async (
+    reviewId: string,
+    payload: CreateReviewPayload
+  ): Promise<{ message: string; review: ProductReview }> => {
+    return apiRequest<{ message: string; review: ProductReview }>(
+      `/api/products/reviews/${reviewId}`,
+      {
+        method: 'PUT',
         auth: true,
         body: JSON.stringify(payload),
       }
