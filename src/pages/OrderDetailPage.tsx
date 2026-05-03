@@ -33,6 +33,8 @@ type ShippingAddress = {
 type OrderItem = {
   _id?: string;
   id?: string;
+  slug?: string;
+  productSlug?: string;
   productId?:
     | {
         _id?: string;
@@ -67,11 +69,13 @@ type OrderItem = {
   finalPrice?: number;
   product?: {
     name?: string;
+    slug?: string;
     image?: string;
     hinhAnh?: string | string[];
   };
   sanPham?: {
     ten?: string;
+    slug?: string;
     hinhAnh?: string | string[];
   };
 };
@@ -283,6 +287,15 @@ function getItemName(item: OrderItem) {
   if (item.product?.name) return item.product.name;
   if (item.sanPham?.ten) return item.sanPham.ten;
   return 'Sản phẩm';
+}
+
+function getItemSlug(item: OrderItem) {
+  if (item.productSlug) return item.productSlug;
+  if (item.slug) return item.slug;
+  if (typeof item.productId === 'object' && item.productId?.slug) return item.productId.slug;
+  if (item.product?.slug) return item.product.slug;
+  if (item.sanPham?.slug) return item.sanPham.slug;
+  return '';
 }
 
 function getItemImage(item: OrderItem) {
@@ -660,20 +673,21 @@ export default function OrderDetailPage() {
               const price = getItemPrice(item);
               const color = getItemColor(item);
               const size = getItemSize(item);
+              const itemSlug = getItemSlug(item);
+              const itemKey = item._id || item.id || `${getOrderCode(order)}-${index}`;
 
-              return (
-                <div
-                  key={item._id || item.id || `${getOrderCode(order)}-${index}`}
-                  className="flex items-center gap-4 border-b border-border pb-4 last:border-b-0 last:pb-0"
-                >
+              const itemContent = (
+                <>
                   <img
                     src={getItemImage(item)}
                     alt={getItemName(item)}
-                    className="h-16 w-16 rounded-lg bg-secondary object-cover"
+                    className="h-16 w-16 rounded-lg bg-secondary object-cover transition group-hover:scale-105"
                   />
 
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 font-medium">{getItemName(item)}</p>
+                    <p className="line-clamp-2 font-medium transition group-hover:text-primary">
+                      {getItemName(item)}
+                    </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {color}
                       {color && size ? ' / ' : ''}
@@ -686,6 +700,27 @@ export default function OrderDetailPage() {
                     <p className="text-sm text-muted-foreground">{formatPrice(price)}</p>
                     <p className="font-semibold">{formatPrice(price * quantity)}</p>
                   </div>
+                </>
+              );
+
+              if (itemSlug) {
+                return (
+                  <Link
+                    key={itemKey}
+                    to={`/san-pham/${itemSlug}`}
+                    className="group flex items-center gap-4 rounded-xl border-b border-border p-2 pb-4 transition hover:bg-secondary/40 last:border-b-0 last:pb-2"
+                  >
+                    {itemContent}
+                  </Link>
+                );
+              }
+
+              return (
+                <div
+                  key={itemKey}
+                  className="flex items-center gap-4 border-b border-border pb-4 last:border-b-0 last:pb-0"
+                >
+                  {itemContent}
                 </div>
               );
             })}
