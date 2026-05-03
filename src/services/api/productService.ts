@@ -57,6 +57,7 @@ export type AdminCategoryRecord = {
 export type AdminVariantSizeRecord = {
   _id?: string;
   size?: string;
+  sku?: string;
   price?: number;
   discountPrice?: number;
   stock?: number;
@@ -409,6 +410,7 @@ function mapBackendProductToSanPham(p: any): SanPham {
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => ({
           size: s.size,
+          sku: s.sku || "",
           price: s.price,
           discountPrice: s.discountPrice,
           finalPrice:
@@ -536,6 +538,7 @@ function mapProductDetailToSanPham(p: any): SanPham {
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => ({
           size: s.size,
+          sku: s.sku || "",
           price: s.price,
           discountPrice: s.discountPrice,
           finalPrice:

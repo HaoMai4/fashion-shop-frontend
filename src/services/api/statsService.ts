@@ -42,9 +42,13 @@ export type AdminSalesStats = {
 };
 
 export type AdminTopProduct = {
-  _id: string;
+  _id?: string;
+  productId?: string;
+  variantId?: string | null;
   productName?: string;
-  productCode?: string;
+  color?: string;
+  colorCode?: string;
+  size?: string;
   qtySold?: number;
   revenue?: number;
 };

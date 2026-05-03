@@ -270,7 +270,7 @@ export default function ProductDetail() {
 
   const displayOriginalPrice =
     typeof selectedSizeInfo?.price === 'number' &&
-    displayPrice < selectedSizeInfo.price
+      displayPrice < selectedSizeInfo.price
       ? selectedSizeInfo.price
       : product.giaGoc;
 
@@ -278,7 +278,7 @@ export default function ProductDetail() {
 
   const discount =
     typeof displayOriginalPrice === 'number' &&
-    displayOriginalPrice > displayPrice
+      displayOriginalPrice > displayPrice
       ? getDiscountPercent(displayOriginalPrice, displayPrice)
       : null;
 
@@ -293,11 +293,11 @@ export default function ProductDetail() {
   const reviewAverage =
     reviews.length > 0
       ? Number(
-          (
-            reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) /
-            reviews.length
-          ).toFixed(1)
-        )
+        (
+          reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) /
+          reviews.length
+        ).toFixed(1)
+      )
       : product.danhGia || 0;
 
   const reviewCount = reviewTotal || product.soLuongDanhGia || 0;
@@ -468,7 +468,7 @@ export default function ProductDetail() {
 
     return Boolean(
       loggedIn &&
-        (currentUserRole === 'admin' || (currentUserId && reviewUserId === currentUserId))
+      (currentUserRole === 'admin' || (currentUserId && reviewUserId === currentUserId))
     );
   };
 
@@ -480,6 +480,28 @@ export default function ProductDetail() {
     } catch {
       return '';
     }
+  };
+
+  const renderReviewVariant = (review: ProductReview) => {
+    if (!review.color && !review.size) return null;
+
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>Phân loại:</span>
+
+        {review.colorCode ? (
+          <span
+            className="h-3.5 w-3.5 rounded-full border border-border"
+            style={{ backgroundColor: review.colorCode }}
+          />
+        ) : null}
+
+        <span>
+          {review.color || 'Không rõ màu'}
+          {review.size ? ` / Size ${review.size}` : ''}
+        </span>
+      </div>
+    );
   };
 
   return (
@@ -504,11 +526,10 @@ export default function ProductDetail() {
                 key={`${img}-${i}`}
                 type="button"
                 onClick={() => setSelectedImage(img)}
-                className={`overflow-hidden rounded-xl border-2 bg-secondary transition-all ${
-                  displayImage === img
-                    ? 'border-primary shadow-sm'
-                    : 'border-transparent hover:border-border'
-                }`}
+                className={`overflow-hidden rounded-xl border-2 bg-secondary transition-all ${displayImage === img
+                  ? 'border-primary shadow-sm'
+                  : 'border-transparent hover:border-border'
+                  }`}
               >
                 <img
                   src={img}
@@ -542,11 +563,10 @@ export default function ProductDetail() {
                   key={`${img}-${i}`}
                   type="button"
                   onClick={() => setSelectedImage(img)}
-                  className={`shrink-0 overflow-hidden rounded-xl border-2 bg-secondary transition-all ${
-                    displayImage === img
-                      ? 'border-primary shadow-sm'
-                      : 'border-transparent hover:border-border'
-                  }`}
+                  className={`shrink-0 overflow-hidden rounded-xl border-2 bg-secondary transition-all ${displayImage === img
+                    ? 'border-primary shadow-sm'
+                    : 'border-transparent hover:border-border'
+                    }`}
                 >
                   <img
                     src={img}
@@ -644,11 +664,10 @@ export default function ProductDetail() {
                       setSelectedImage(nextImages[0] || '/placeholder.svg');
                       setQuantity(1);
                     }}
-                    className={`relative h-10 w-10 rounded-full border-2 transition-all ${
-                      selectedColor === m.ten
-                        ? 'scale-105 border-primary ring-2 ring-primary/20'
-                        : 'border-border'
-                    }`}
+                    className={`relative h-10 w-10 rounded-full border-2 transition-all ${selectedColor === m.ten
+                      ? 'scale-105 border-primary ring-2 ring-primary/20'
+                      : 'border-border'
+                      }`}
                     style={{ backgroundColor: m.ma }}
                     title={m.ten}
                   >
@@ -685,407 +704,366 @@ export default function ProductDetail() {
                         setSelectedSize(s);
                         setQuantity(1);
                       }}
-                      className={`min-w-[52px] rounded-xl border px-4 py-2 text-sm font-medium transition-all ${
-                        isSelected
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : isDisabled
-                            ? 'cursor-not-allowed border-border bg-muted text-muted-foreground opacity-60'
-                            : 'border-border bg-background hover:border-primary/50'
-                      }`}
+                      className={`min-w-[52px] rounded-xl border px-4 py-2 text-sm font-medium transition-all ${isSelected
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background hover:border-primary'
+                        } ${isDisabled ? 'cursor-not-allowed opacity-40' : ''}`}
                     >
                       {s}
                     </button>
                   );
                 })}
               </div>
+
+              <p className="text-sm text-muted-foreground">
+                Còn lại: <span className="font-medium text-foreground">{displayStock}</span>
+              </p>
             </div>
 
             <div className="space-y-3">
               <p className="text-sm font-medium">Số lượng</p>
+              <div className="inline-flex items-center rounded-xl border">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="p-3 transition-colors hover:bg-secondary"
+                  disabled={quantity <= 1}
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center rounded-xl border">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-11 w-11 rounded-r-none"
-                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
+                <span className="min-w-[52px] text-center font-medium">{quantity}</span>
 
-                  <span className="flex h-11 min-w-[52px] items-center justify-center font-medium">
-                    {quantity}
-                  </span>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-11 w-11 rounded-l-none"
-                    onClick={() =>
-                      setQuantity((q) =>
-                        Math.min(displayStock > 0 ? displayStock : 1, q + 1)
-                      )
-                    }
-                    disabled={displayStock <= 0}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <span className="text-sm text-muted-foreground">
-                  Còn {displayStock || 0} sản phẩm
-                </span>
+                <button type="button"
+                  onClick={() =>
+                    setQuantity((q) => Math.min(displayStock || 1, q + 1))
+                  }
+                  className="p-3 transition-colors hover:bg-secondary"
+                  disabled={quantity >= displayStock}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-1">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Button
-                type="button"
                 size="lg"
-                className="flex-1 gap-2"
-                disabled={!canAddToCart}
+                className="gap-2 rounded-xl"
                 onClick={() => {
-                  if (!selectedVariant?.id) return;
+                  if (!product || !selectedVariant?.id || !selectedSize || !canAddToCart) {
+                    toast.error('Vui lòng chọn đầy đủ màu, size và số lượng hợp lệ');
+                    return;
+                  }
 
-                  addItem(
-                    {
-                      ...product,
-                      hinhAnh: displayImage,
-                      gia: displayPrice,
-                    },
-                    selectedColor,
-                    selectedSize,
-                    quantity,
-                    {
-                      variantId: selectedVariant.id,
-                      price: displayPrice,
-                      image: displayImage,
-                    }
-                  );
+                  addItem(product, selectedSize, selectedColor, quantity, {
+                    variantId: String(selectedVariant.id),
+                    image: displayImage,
+                    price: displayPrice,
+                  });
                 }}
+                disabled={!canAddToCart}
               >
                 <ShoppingBag className="h-5 w-5" />
                 Thêm vào giỏ
               </Button>
 
               <Button
-                type="button"
                 size="lg"
-                variant="secondary"
-                className="flex-1"
-                disabled={!canAddToCart}
+                variant="outline"
+                className="rounded-xl"
                 onClick={handleBuyNow}
+                disabled={!canAddToCart}
               >
                 Mua ngay
               </Button>
-
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                className="px-3"
-                onClick={() =>
-                  isInWishlist(productId)
-                    ? removeWishlist(productId)
-                    : addWishlist(product)
-                }
-              >
-                <Heart
-                  className={`h-5 w-5 ${isInWishlist(productId) ? 'fill-sale text-sale' : ''}`}
-                />
-              </Button>
             </div>
 
-            <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4">
-              <p className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <Bot className="h-4 w-4 text-accent" />
-                Trợ lý AI hỗ trợ bạn
-              </p>
+            <Button
+              variant="ghost"
+              className="gap-2 px-0 text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (isInWishlist(product.id)) {
+                  removeWishlist(product.id);
+                } else {
+                  addWishlist(product);
+                }
+              }}
+            >
+              <Heart
+                className={`h-5 w-5 ${isInWishlist(product.id)
+                  ? 'fill-destructive text-destructive'
+                  : ''
+                  }`}
+              />
+              {isInWishlist(product.id)
+                ? 'Đã thêm vào yêu thích'
+                : 'Thêm vào yêu thích'}
+            </Button>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={() =>
-                    askAiInWidget(
-                      `Tư vấn size cho sản phẩm "${product.ten}". Màu đang xem: ${selectedColor || 'chưa chọn'}, size đang chọn: ${selectedSize || 'chưa chọn'}, giá hiện tại: ${formatPrice(displayPrice)}.`
-                    )
-                  }
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                  AI tư vấn size
-                </Button>
+            <div className="grid gap-3 pt-2 sm:grid-cols-3">
+              <div className="rounded-xl border p-4">
+                <Truck className="mb-2 h-5 w-5 text-primary" />
+                <p className="text-sm font-medium">Giao hàng nhanh</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Hỗ trợ giao hàng toàn quốc.
+                </p>
+              </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={() =>
-                    askAiInWidget(
-                      `Gợi ý phối đồ với sản phẩm "${product.ten}" màu ${selectedColor || 'hiện tại'}.`
-                    )
-                  }
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                  AI gợi ý phối đồ
-                </Button>
+              <div className="rounded-xl border p-4">
+                <RotateCcw className="mb-2 h-5 w-5 text-primary" />
+                <p className="text-sm font-medium">Đổi trả linh hoạt</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Đổi trả theo chính sách cửa hàng.
+                </p>
+              </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={() =>
-                    askAiInWidget(
-                      `Gợi ý sản phẩm tương tự với "${product.ten}", màu ${selectedColor || 'hiện tại'}, mức giá khoảng ${formatPrice(displayPrice)}.`
-                    )
-                  }
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                  Sản phẩm tương tự
-                </Button>
+              <div className="rounded-xl border p-4">
+                <Shield className="mb-2 h-5 w-5 text-primary" />
+                <p className="text-sm font-medium">Sản phẩm chính hãng</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Cam kết thông tin sản phẩm rõ ràng.
+                </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { icon: Truck, label: 'Miễn phí ship đơn 500K' },
-                { icon: RotateCcw, label: 'Đổi trả 30 ngày' },
-                { icon: Shield, label: 'Bảo hành chất lượng' },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-3 text-center"
-                >
-                  <item.icon className="h-5 w-5 text-accent" />
-                  <span className="text-[11px] text-muted-foreground">{item.label}</span>
-                </div>
-              ))}
+            <div className="rounded-2xl border bg-secondary/40 p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                <p className="font-semibold">Cần tư vấn thêm?</p>
+              </div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Bạn có thể hỏi AI về cách phối đồ, chọn size hoặc sản phẩm phù hợp
+                với nhu cầu của mình.
+              </p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() =>
+                  askAiInWidget(
+                    `Tư vấn giúp tôi sản phẩm ${product.ten}, màu ${selectedColor}, size ${selectedSize}`
+                  )
+                }
+              >
+                Hỏi AI về sản phẩm này
+              </Button>
             </div>
           </div>
         </div>
 
-        <div className="mb-12 rounded-2xl border p-6">
-          <h2 className="mb-4 text-xl font-bold">Mô tả sản phẩm</h2>
-          <div className="prose prose-sm max-w-none text-muted-foreground">
-            <p>{product.moTaChiTiet || product.moTa}</p>
-            <ul className="mt-3">
-              <li>Chất liệu: {product.chatLieu || 'Đang cập nhật'}</li>
-              <li>
-                Giới tính:{' '}
+        <section className="mb-16 rounded-2xl border bg-card p-6">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold">Mô tả sản phẩm</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Thông tin chi tiết giúp bạn lựa chọn sản phẩm phù hợp.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 text-sm md:grid-cols-2">
+            <div className="rounded-xl bg-secondary/40 p-4">
+              <p className="font-medium">Thương hiệu</p>
+              <p className="mt-1 text-muted-foreground">
+                {product.thuongHieu || 'StyleHub'}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-secondary/40 p-4">
+              <p className="font-medium">Danh mục</p>
+              <p className="mt-1 text-muted-foreground">
+                {product.danhMuc || 'Chưa phân loại'}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-secondary/40 p-4">
+              <p className="font-medium">Giới tính</p>
+              <p className="mt-1 text-muted-foreground">
                 {product.gioiTinh === 'nam'
                   ? 'Nam'
                   : product.gioiTinh === 'nu'
                     ? 'Nữ'
                     : 'Unisex'}
-              </li>
-              <li>Danh mục: {product.danhMuc}</li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="mb-12 rounded-2xl border p-6">
-          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-bold">Đánh giá sản phẩm</h2>
-              <p className="text-sm text-muted-foreground">
-                {reviewCount > 0
-                  ? `${reviewCount} đánh giá từ khách hàng`
-                  : 'Chưa có đánh giá nào cho sản phẩm này'}
               </p>
             </div>
 
-            <div className="flex items-center gap-1">
-              <RatingStars value={reviewAverage} size="md" />
-              <span className="ml-2 text-sm font-medium">
-                {reviewAverage}/5
-              </span>
+            <div className="rounded-xl bg-secondary/40 p-4">
+              <p className="font-medium">Chất liệu</p>
+              <p className="mt-1 text-muted-foreground">
+                {product.chatLieu || 'Chưa cập nhật'}
+              </p>
+            </div>
+          </div>
+
+          {product.moTaChiTiet ? (
+            <p className="mt-5 whitespace-pre-line leading-7 text-muted-foreground">
+              {product.moTaChiTiet}
+            </p>
+          ) : null}
+        </section>
+
+        <section className="mb-16 rounded-2xl border bg-card p-6" id="review-form">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold">Đánh giá sản phẩm</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {reviewCount} đánh giá từ khách hàng đã mua sản phẩm.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <RatingStars value={reviewAverage} size="sm" />
+              <span className="text-sm font-medium">{reviewAverage}/5</span>
             </div>
           </div>
 
           {loggedIn ? (
-            <div id="review-form" className="mb-8 rounded-2xl bg-secondary/40 p-4">
-              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="font-semibold">
-                  {editingReviewId ? 'Cập nhật đánh giá của bạn' : 'Viết đánh giá của bạn'}
-                </h3>
+            <div className="mb-6 rounded-xl border bg-secondary/30 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">
+                    {editingReviewId ? 'Sửa đánh giá của bạn' : 'Viết đánh giá'}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Chỉ tài khoản đã mua và hoàn thành đơn hàng mới có thể đánh giá.
+                  </p>
+                </div>
 
-                {editingReviewId && (
-                  <Badge variant="outline">Đang sửa đánh giá</Badge>
-                )}
+                {editingReviewId ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1"
+                    onClick={handleCancelEditReview}
+                  >
+                    <X className="h-4 w-4" />
+                    Hủy sửa
+                  </Button>
+                ) : null}
               </div>
 
-              <div className="mb-3 flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Chọn số sao:</span>
-
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: 5 }).map((_, i) => {
-                    const starValue = i + 1;
-
-                    return (
-                      <button
-                        key={starValue}
-                        type="button"
-                        onClick={() => setReviewRating(starValue)}
-                        className="rounded p-0.5 transition hover:scale-105"
-                      >
-                        <Star
-                          className={`h-6 w-6 ${
-                            starValue <= reviewRating
-                              ? 'fill-warning text-warning'
-                              : 'text-border'
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">Số sao:</span>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      className="rounded-md p-1"
+                    >
+                      <Star
+                        className={`h-6 w-6 ${reviewRating >= star
+                          ? 'fill-warning text-warning'
+                          : 'text-muted-foreground'
                           }`}
-                        />
-                      </button>
-                    );
-                  })}
+                      />
+                    </button>
+                  ))}
                 </div>
               </div>
 
               <textarea
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="Chia sẻ cảm nhận của bạn về chất lượng, form dáng, chất liệu..."
-                className="min-h-[110px] w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary"
+                placeholder="Chia sẻ cảm nhận của bạn về chất liệu, form dáng, trải nghiệm sử dụng..."
+                className="min-h-[110px] w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-primary/20"
               />
 
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Chỉ tài khoản đã mua sản phẩm và có đơn hoàn thành mới có thể đánh giá.
-                </p>
-
-                <div className="flex flex-wrap gap-2">
-                  {editingReviewId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="gap-2"
-                      disabled={reviewSubmitting}
-                      onClick={handleCancelEditReview}
-                    >
-                      <X className="h-4 w-4" />
-                      Hủy sửa
-                    </Button>
-                  )}
-
-                  <Button
-                    type="button"
-                    className="gap-2"
-                    disabled={reviewSubmitting}
-                    onClick={handleSubmitReview}
-                  >
-                    <Send className="h-4 w-4" />
-                    {reviewSubmitting
-                      ? 'Đang gửi...'
-                      : editingReviewId
-                        ? 'Cập nhật đánh giá'
-                        : 'Gửi đánh giá'}
-                  </Button>
-                </div>
-              </div>
+              <Button
+                className="mt-3 gap-2"
+                onClick={handleSubmitReview}
+                disabled={reviewSubmitting}
+              >
+                <Send className="h-4 w-4" />
+                {reviewSubmitting
+                  ? 'Đang gửi...'
+                  : editingReviewId
+                    ? 'Lưu đánh giá'
+                    : 'Gửi đánh giá'}
+              </Button>
             </div>
           ) : (
-            <div className="mb-8 rounded-2xl border border-dashed p-5 text-center">
-              <h3 className="mb-2 font-semibold">Đăng nhập để đánh giá sản phẩm</h3>
-              <p className="mb-4 text-sm text-muted-foreground">
-                Bạn cần đăng nhập và có đơn hàng đã hoàn thành để gửi đánh giá cho sản phẩm này.
-              </p>
-
-              <Button asChild>
-                <Link to="/dang-nhap">Đăng nhập để đánh giá</Link>
-              </Button>
+            <div className="mb-6 rounded-xl border bg-secondary/30 p-4 text-sm text-muted-foreground">
+              Vui lòng{' '}
+              <Link to="/dang-nhap" className="font-medium text-primary hover:underline">
+                đăng nhập
+              </Link>{' '}
+              để đánh giá sản phẩm.
             </div>
           )}
 
           {reviewsLoading ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
+            <div className="py-8 text-center text-sm text-muted-foreground">
               Đang tải đánh giá...
             </div>
           ) : reviews.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-              Sản phẩm chưa có đánh giá nào.
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Chưa có đánh giá nào cho sản phẩm này.
             </div>
           ) : (
             <div className="space-y-4">
               {reviews.map((review) => (
-                <div key={review._id} className="rounded-2xl border p-4">
-                  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div key={review._id} className="rounded-xl border p-4">
+                  <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium">{getReviewUserName(review)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatReviewDate(review.createdAt)}
-                      </p>
+                      <p className="font-semibold">{getReviewUserName(review)}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <RatingStars value={review.rating} size="sm" />
+                        {review.createdAt ? (
+                          <span className="text-xs text-muted-foreground">
+                            {formatReviewDate(review.createdAt)}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {renderReviewVariant(review)}
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-4 w-4 ${
-                            i < review.rating
-                              ? 'fill-warning text-warning'
-                              : 'text-border'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <p className="leading-7 text-muted-foreground">
-                    {review.comment || 'Khách hàng chưa để lại nhận xét.'}
-                  </p>
-
-                  {(isOwnReview(review) || canDeleteReview(review)) && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {isOwnReview(review) && (
+                    <div className="flex flex-wrap gap-2">
+                      {isOwnReview(review) ? (
                         <Button
-                          type="button"
-                          variant="outline"
                           size="sm"
-                          className="gap-2"
+                          variant="outline"
+                          className="gap-1"
                           onClick={() => handleEditReview(review)}
                         >
                           <Pencil className="h-4 w-4" />
-                          Sửa đánh giá
+                          Sửa
                         </Button>
-                      )}
+                      ) : null}
 
-                      {canDeleteReview(review) && (
+                      {canDeleteReview(review) ? (
                         <Button
-                          type="button"
-                          variant="outline"
                           size="sm"
-                          className="gap-2 text-destructive hover:text-destructive"
+                          variant="destructive"
+                          className="gap-1"
                           onClick={() => handleDeleteReview(review._id)}
                         >
                           <Trash2 className="h-4 w-4" />
-                          Xóa đánh giá
+                          Xóa
                         </Button>
-                      )}
+                      ) : null}
                     </div>
-                  )}
+                  </div>
 
-                  {review.adminReply?.message && (
-                    <div className="mt-3 rounded-xl bg-accent/10 p-3">
-                      <p className="mb-1 text-sm font-medium text-accent">
-                        Phản hồi từ StyleHub
-                      </p>
-                      <p className="text-sm text-muted-foreground">
+                  {review.comment ? (
+                    <p className="leading-7 text-muted-foreground">{review.comment}</p>
+                  ) : null}
+
+                  {review.adminReply?.message ? (
+                    <div className="mt-3 rounded-xl bg-secondary/50 p-3 text-sm">
+                      <p className="font-medium">Phản hồi từ StyleHub</p>
+                      <p className="mt-1 text-muted-foreground">
                         {review.adminReply.message}
                       </p>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </MainLayout>
   );

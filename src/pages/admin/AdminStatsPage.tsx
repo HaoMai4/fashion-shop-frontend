@@ -159,6 +159,26 @@ function getPeriodLabel(period: SalesPeriod) {
   return map[period];
 }
 
+function renderProductVariant(item: AdminTopProduct) {
+  const color = item.color || "Không rõ màu";
+  const size = item.size || "Không rõ size";
+
+  return (
+    <div className="flex items-center gap-2">
+      {item.colorCode ? (
+        <span
+          className="h-3.5 w-3.5 rounded-full border border-border"
+          style={{ backgroundColor: item.colorCode }}
+        />
+      ) : null}
+
+      <span>
+        {color} / {size}
+      </span>
+    </div>
+  );
+}
+
 export default function AdminStatsPage() {
   const [loading, setLoading] = useState(true);
   const [reloading, setReloading] = useState(false);
@@ -542,6 +562,7 @@ export default function AdminStatsPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Sản phẩm</TableHead>
+                          <TableHead>Phân loại</TableHead>
                           <TableHead>Đã bán</TableHead>
                           <TableHead>Doanh thu</TableHead>
                         </TableRow>
@@ -552,6 +573,7 @@ export default function AdminStatsPage() {
                             <TableCell className="font-medium">
                               {item.productName || "Không rõ"}
                             </TableCell>
+                            <TableCell>{renderProductVariant(item)}</TableCell>
                             <TableCell>{item.qtySold || 0}</TableCell>
                             <TableCell>{formatPrice(item.revenue || 0)}</TableCell>
                           </TableRow>
@@ -568,7 +590,7 @@ export default function AdminStatsPage() {
                     Sản phẩm bán chậm nhưng còn tồn
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Ưu tiên sản phẩm còn tồn kho nhưng bán ít trong khoảng ngày đã chọn.
+                    Ưu tiên sản phẩm còn tồn nhiều nhưng bán ít.
                   </p>
                 </CardHeader>
 
@@ -584,22 +606,16 @@ export default function AdminStatsPage() {
                           <TableHead>Sản phẩm</TableHead>
                           <TableHead>Tồn kho</TableHead>
                           <TableHead>Đã bán</TableHead>
-                          <TableHead>Điểm chậm</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {slowProducts.map((item, index) => (
-                          <TableRow key={`${item._id || index}`}>
+                        {slowProducts.map((item) => (
+                          <TableRow key={item._id}>
                             <TableCell className="font-medium">
                               {item.name || "Không rõ"}
                             </TableCell>
                             <TableCell>{item.totalStock || 0}</TableCell>
                             <TableCell>{item.qtySold || 0}</TableCell>
-                            <TableCell>
-                              {typeof item.score === "number"
-                                ? item.score.toFixed(2)
-                                : "0.00"}
-                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -614,7 +630,7 @@ export default function AdminStatsPage() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Top khách hàng</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Xếp hạng theo tổng chi tiêu trong khoảng ngày đã chọn.
+                    Xếp hạng theo tổng giá trị đơn hàng đã thanh toán.
                   </p>
                 </CardHeader>
 
@@ -627,19 +643,17 @@ export default function AdminStatsPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Hạng</TableHead>
                           <TableHead>Khách hàng</TableHead>
                           <TableHead>Số đơn</TableHead>
-                          <TableHead>Tổng chi tiêu</TableHead>
+                          <TableHead>Tổng chi</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {topCustomers.map((item, index) => (
-                          <TableRow key={`${item.email || item.name || index}`}>
-                            <TableCell>{item.rank || index + 1}</TableCell>
+                          <TableRow key={`${item.userId || item.email || index}`}>
                             <TableCell>
                               <div>
-                                <p className="font-medium">{item.name || "Không rõ"}</p>
+                                <p className="font-medium">{item.name || "Khách hàng"}</p>
                                 {item.email ? (
                                   <p className="text-xs text-muted-foreground">
                                     {item.email}
@@ -661,14 +675,14 @@ export default function AdminStatsPage() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Đơn hàng gần đây</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    8 đơn mới nhất trong khoảng ngày đã chọn.
+                    Các đơn mới nhất trong khoảng ngày đang xem.
                   </p>
                 </CardHeader>
 
                 <CardContent>
                   {overview.recentOrders.length === 0 ? (
                     <div className="py-8 text-center text-sm text-muted-foreground">
-                      Chưa có dữ liệu.
+                      Chưa có đơn hàng gần đây.
                     </div>
                   ) : (
                     <Table>
@@ -677,27 +691,20 @@ export default function AdminStatsPage() {
                           <TableHead>Mã đơn</TableHead>
                           <TableHead>Trạng thái</TableHead>
                           <TableHead>Thanh toán</TableHead>
-                          <TableHead>Tổng tiền</TableHead>
+                          <TableHead>Ngày tạo</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {overview.recentOrders.map((order) => (
                           <TableRow key={order._id}>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium">
-                                  {order.orderCode || order._id}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatDateTime(order.createdAt)}
-                                </p>
-                              </div>
+                            <TableCell className="font-medium">
+                              {order.orderCode || order._id}
                             </TableCell>
                             <TableCell>{getStatusLabel(order.orderStatus)}</TableCell>
                             <TableCell>
                               {getPaymentLabel(order.paymentMethod?.status)}
                             </TableCell>
-                            <TableCell>{formatPrice(order.totalAmount || 0)}</TableCell>
+                            <TableCell>{formatDateTime(order.createdAt)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

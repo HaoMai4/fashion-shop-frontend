@@ -25,6 +25,10 @@ export interface ProductReview {
   _id: string;
   productId?: string | ReviewProduct;
   userId?: string | ReviewUser;
+  variantId?: string | null;
+  color?: string;
+  colorCode?: string;
+  size?: string;
   rating: number;
   comment?: string;
   adminReply?: AdminReply | null;

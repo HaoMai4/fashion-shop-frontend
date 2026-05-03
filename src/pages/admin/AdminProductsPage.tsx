@@ -1660,7 +1660,7 @@ export default function AdminProductsPage() {
                                 Thêm size vào biến thể này
                               </p>
 
-                              <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+                              <div className="grid gap-3 md:grid-cols-[0.8fr_1.2fr_1fr_1fr_1fr_auto]">
                                 <Input
                                   value={newSizeDraft.size}
                                   onChange={(e) =>
@@ -1830,7 +1830,7 @@ export default function AdminProductsPage() {
                     {variantForm.sizes.map((sizeItem, index) => (
                       <div
                         key={index}
-                        className="grid gap-3 rounded-lg border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto]"
+                        className="grid gap-3 rounded-lg border p-3 md:grid-cols-[0.8fr_1.2fr_1fr_1fr_1fr_auto]"
                       >
                         <Input
                           value={sizeItem.size}
