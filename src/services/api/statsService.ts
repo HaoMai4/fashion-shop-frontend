@@ -4,6 +4,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8686
 const TOKEN_KEY = "stylehub_token";
 const LEGACY_TOKEN_KEY = "token";
 
+export type DateRangeParams = {
+  startDate?: string;
+  endDate?: string;
+};
+
 export type AdminOverviewStats = {
   totalOrders: number;
   totalRevenueAll: number;
@@ -27,6 +32,8 @@ export type AdminOverviewStats = {
 export type AdminSalesStats = {
   period: "day" | "week" | "month";
   range: number;
+  startDate?: string;
+  endDate?: string;
   labels: string[];
   data: Array<{
     orders: number;
@@ -37,7 +44,7 @@ export type AdminSalesStats = {
 export type AdminTopProduct = {
   _id: string;
   productName?: string;
-  sku?: string;
+  productCode?: string;
   qtySold?: number;
   revenue?: number;
 };
@@ -61,6 +68,11 @@ export type AdminTopCustomer = {
   totalSpent?: number;
   userId?: string;
 };
+
+function appendDateRange(search: URLSearchParams, params?: DateRangeParams) {
+  if (params?.startDate) search.set("startDate", params.startDate);
+  if (params?.endDate) search.set("endDate", params.endDate);
+}
 
 async function downloadWithAuth(path: string, filename = "thongke.xlsx") {
   const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
@@ -98,69 +110,111 @@ async function downloadWithAuth(path: string, filename = "thongke.xlsx") {
 }
 
 export const statsService = {
-  async getOverview() {
-    return apiRequest<AdminOverviewStats>("/api/admin/stats/overview", {
-      auth: true,
-    });
+  async getOverview(params?: DateRangeParams) {
+    const search = new URLSearchParams();
+    appendDateRange(search, params);
+
+    const query = search.toString();
+
+    return apiRequest<AdminOverviewStats>(
+      `/api/admin/stats/overview${query ? `?${query}` : ""}`,
+      {
+        auth: true,
+      }
+    );
   },
 
-  async getSales(params?: { period?: "day" | "week" | "month"; range?: number }) {
+  async getSales(params?: {
+    period?: "day" | "week" | "month";
+    range?: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const search = new URLSearchParams();
 
     if (params?.period) search.set("period", params.period);
     if (params?.range) search.set("range", String(params.range));
+    appendDateRange(search, params);
 
     const query = search.toString();
+
     return apiRequest<AdminSalesStats>(
       `/api/admin/stats/sales${query ? `?${query}` : ""}`,
       { auth: true }
     );
   },
 
-  async getTopProducts(params?: { limit?: number; periodDays?: number }) {
+  async getTopProducts(params?: {
+    limit?: number;
+    periodDays?: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const search = new URLSearchParams();
 
     if (params?.limit) search.set("limit", String(params.limit));
     if (params?.periodDays) search.set("periodDays", String(params.periodDays));
+    appendDateRange(search, params);
 
     const query = search.toString();
+
     return apiRequest<{ periodDays: number; limit: number; data: AdminTopProduct[] }>(
       `/api/admin/stats/top-products${query ? `?${query}` : ""}`,
       { auth: true }
     );
   },
 
-  async getSlowProducts(params?: { limit?: number; periodDays?: number }) {
+  async getSlowProducts(params?: {
+    limit?: number;
+    periodDays?: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const search = new URLSearchParams();
 
     if (params?.limit) search.set("limit", String(params.limit));
     if (params?.periodDays) search.set("periodDays", String(params.periodDays));
+    appendDateRange(search, params);
 
     const query = search.toString();
+
     return apiRequest<{ periodDays: number; limit: number; data: AdminSlowProduct[] }>(
       `/api/admin/stats/slow-products${query ? `?${query}` : ""}`,
       { auth: true }
     );
   },
 
-  async getTopCustomers(params?: { limit?: number; periodDays?: number }) {
+  async getTopCustomers(params?: {
+    limit?: number;
+    periodDays?: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const search = new URLSearchParams();
 
     if (params?.limit) search.set("limit", String(params.limit));
     if (params?.periodDays) search.set("periodDays", String(params.periodDays));
+    appendDateRange(search, params);
 
     const query = search.toString();
+
     return apiRequest<{ periodDays: number; limit: number; data: AdminTopCustomer[] }>(
       `/api/admin/stats/top-customers${query ? `?${query}` : ""}`,
       { auth: true }
     );
   },
 
-  async exportExcel(params?: { period?: "day" | "week" | "month"; range?: number }) {
+  async exportExcel(params?: {
+    period?: "day" | "week" | "month";
+    range?: number;
+    startDate?: string;
+    endDate?: string;
+  }) {
     const search = new URLSearchParams();
 
     if (params?.period) search.set("period", params.period);
     if (params?.range) search.set("range", String(params.range));
+    appendDateRange(search, params);
 
     const query = search.toString();
     const fileName = `thongke_${new Date().toISOString().slice(0, 10)}.xlsx`;
