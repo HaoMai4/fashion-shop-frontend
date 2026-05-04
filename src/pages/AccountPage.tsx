@@ -6,7 +6,7 @@ import {
   MapPin,
   Heart,
   Package,
-  Award,
+  TicketPercent,
   Briefcase,
   ShieldCheck,
   ShoppingBag,
@@ -238,11 +238,11 @@ export default function AccountPage() {
         },
       },
       {
-        key: 'points',
-        label: 'Điểm thành viên',
-        icon: <Award className="h-5 w-5 text-slate-500" />,
+        key: 'voucher-wallet',
+        label: 'Ví voucher',
+        icon: <TicketPercent className="h-5 w-5 text-slate-500" />,
         action: () => {
-          toast.info('Phần điểm thành viên sẽ làm ở bước sau');
+          navigate('/vi-voucher');
         },
       },
       {

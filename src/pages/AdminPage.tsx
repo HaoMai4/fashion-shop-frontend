@@ -1,5 +1,11 @@
 import { Link } from 'react-router-dom';
-import { Package, ShoppingBag, BarChart3, FileText } from 'lucide-react';
+import {
+  Package,
+  ShoppingBag,
+  BarChart3,
+  FileText,
+  TicketPercent,
+} from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +20,7 @@ const adminModules = [
   },
   {
     title: 'Yêu cầu hủy đơn',
-    description: 'Xem danh sách yêu cầu hủy đơn và duyệt yêu cầu hủy từ khách hàng.',
+    description: 'Xem danh sách yêu cầu hủy đơn, duyệt hoặc từ chối yêu cầu từ khách hàng.',
     href: '/admin/order-reports',
     icon: FileText,
     enabled: true,
@@ -24,6 +30,13 @@ const adminModules = [
     description: 'Quản lý sản phẩm gốc, biến thể, size, giá, tồn kho và xóa variant.',
     href: '/admin/products',
     icon: Package,
+    enabled: true,
+  },
+  {
+    title: 'Quản lý voucher',
+    description: 'Tạo, chỉnh sửa, bật/tắt và ẩn/hiện voucher trong ví người dùng.',
+    href: '/admin/vouchers',
+    icon: TicketPercent,
     enabled: true,
   },
   {
@@ -46,7 +59,7 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {adminModules.map((module) => {
             const Icon = module.icon;
 

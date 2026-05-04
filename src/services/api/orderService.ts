@@ -153,4 +153,17 @@ export const orderService = {
       auth: true,
     });
   },
+
+  async rejectOrderReport(
+    reportId: string,
+    payload?: {
+      reason?: string;
+    }
+  ) {
+    return apiRequest(`/api/orders/admin/reports/${encodeURIComponent(reportId)}/reject`, {
+      method: "PATCH",
+      body: JSON.stringify(payload || {}),
+      auth: true,
+    });
+  },
 };

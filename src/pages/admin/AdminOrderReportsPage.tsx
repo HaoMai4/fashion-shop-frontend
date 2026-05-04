@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, FileText, RefreshCw } from 'lucide-react';
+import { CheckCircle2, FileText, RefreshCw, XCircle } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -69,9 +69,12 @@ type OrderReportRecord = {
   note?: string;
   content?: string;
   description?: string;
+  rejectReason?: string;
+  previousStatus?: string;
   createdAt?: string;
   updatedAt?: string;
   approvedAt?: string;
+  processedAt?: string;
 };
 
 type ReportResponse = {
@@ -263,6 +266,7 @@ export default function AdminOrderReportsPage() {
   const [pages, setPages] = useState(1);
   const [selectedReport, setSelectedReport] = useState<OrderReportRecord | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
   const currentSelectedId = useMemo(
     () => selectedReport?._id || selectedReport?.id || null,
@@ -271,6 +275,7 @@ export default function AdminOrderReportsPage() {
 
   const fetchReports = async (targetPage = page, status = filterStatus) => {
     setLoading(true);
+
     try {
       const res = (await orderService.getAdminOrderReports({
         page: targetPage,
@@ -306,6 +311,7 @@ export default function AdminOrderReportsPage() {
 
   const handleApprove = async (reportId: string) => {
     setApprovingId(reportId);
+
     try {
       await orderService.approveOrderReport(reportId);
       toast.success('Duyệt yêu cầu hủy đơn thành công');
@@ -318,6 +324,35 @@ export default function AdminOrderReportsPage() {
     }
   };
 
+  const handleReject = async (reportId: string) => {
+    const confirmed = window.confirm(
+      'Bạn có chắc muốn từ chối yêu cầu hủy đơn này không? Đơn hàng sẽ quay lại trạng thái trước khi yêu cầu hủy.'
+    );
+
+    if (!confirmed) return;
+
+    setRejectingId(reportId);
+
+    try {
+      await orderService.rejectOrderReport(reportId);
+      toast.success('Đã từ chối yêu cầu hủy đơn');
+      await fetchReports(page, filterStatus);
+    } catch (error: any) {
+      console.error('rejectOrderReport error:', error);
+      toast.error(error?.message || 'Không thể từ chối yêu cầu hủy đơn');
+    } finally {
+      setRejectingId(null);
+    }
+  };
+
+  const getReportStatus = (report?: OrderReportRecord | null) => {
+    return normalizeReportStatus(report?.status || report?.trangThai);
+  };
+
+  const isReportPending = (report?: OrderReportRecord | null) => {
+    return getReportStatus(report) === 'pending';
+  };
+
   return (
     <MainLayout>
       <div className="container mx-auto max-w-7xl px-4 py-6">
@@ -325,7 +360,7 @@ export default function AdminOrderReportsPage() {
           <div>
             <h1 className="text-2xl font-bold">Yêu cầu hủy đơn</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Xem danh sách yêu cầu hủy đơn và duyệt yêu cầu từ khách hàng.
+              Các yêu cầu hủy được gắn với đơn hàng gốc. Duyệt yêu cầu sẽ chuyển đơn tương ứng sang trạng thái Đã hủy, còn từ chối sẽ đưa đơn về trạng thái trước đó.
             </p>
           </div>
 
@@ -374,7 +409,9 @@ export default function AdminOrderReportsPage() {
               ) : reports.length === 0 ? (
                 <div className="py-12 text-center">
                   <FileText className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
-                  <p className="text-sm text-muted-foreground">Không có yêu cầu hủy đơn phù hợp</p>
+                  <p className="text-sm text-muted-foreground">
+                    Không có yêu cầu hủy đơn phù hợp
+                  </p>
                 </div>
               ) : (
                 <>
@@ -387,7 +424,7 @@ export default function AdminOrderReportsPage() {
                         <TableHead>Ngày gửi</TableHead>
                         <TableHead>Trạng thái</TableHead>
                         <TableHead className="w-[90px] text-center">Xem</TableHead>
-                        <TableHead className="w-[120px] text-center">Duyệt</TableHead>
+                        <TableHead className="w-[180px] text-center">Xử lý</TableHead>
                       </TableRow>
                     </TableHeader>
 
@@ -395,7 +432,9 @@ export default function AdminOrderReportsPage() {
                       {reports.map((report) => {
                         const reportId = report._id || report.id || '';
                         const statusInfo = getStatusBadgeInfo(report.status || report.trangThai);
-                        const isApproved = normalizeReportStatus(report.status || report.trangThai) === 'approved';
+                        const pending = isReportPending(report);
+                        const disabled =
+                          approvingId === reportId || rejectingId === reportId;
 
                         return (
                           <TableRow key={reportId}>
@@ -405,7 +444,9 @@ export default function AdminOrderReportsPage() {
 
                             <TableCell>
                               <div>
-                                <p className="text-sm font-medium">{getCustomerName(report)}</p>
+                                <p className="text-sm font-medium">
+                                  {getCustomerName(report)}
+                                </p>
                                 <p className="text-xs text-muted-foreground">
                                   {getCustomerPhone(report)}
                                 </p>
@@ -437,13 +478,30 @@ export default function AdminOrderReportsPage() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              <Button
-                                size="sm"
-                                disabled={isApproved || approvingId === reportId}
-                                onClick={() => handleApprove(reportId)}
-                              >
-                                {approvingId === reportId ? 'Đang duyệt...' : 'Duyệt'}
-                              </Button>
+                              {pending ? (
+                                <div className="flex justify-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    disabled={disabled}
+                                    onClick={() => handleApprove(reportId)}
+                                  >
+                                    {approvingId === reportId ? 'Đang duyệt...' : 'Duyệt'}
+                                  </Button>
+
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={disabled}
+                                    onClick={() => handleReject(reportId)}
+                                  >
+                                    {rejectingId === reportId ? 'Đang từ chối...' : 'Từ chối'}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  Đã xử lý
+                                </span>
+                              )}
                             </TableCell>
                           </TableRow>
                         );
@@ -465,6 +523,7 @@ export default function AdminOrderReportsPage() {
                       >
                         Trước
                       </Button>
+
                       <Button
                         variant="outline"
                         size="sm"
@@ -509,7 +568,9 @@ export default function AdminOrderReportsPage() {
                     <div>
                       <p className="text-xs text-muted-foreground">Ngày gửi yêu cầu</p>
                       <p className="font-semibold">
-                        {selectedReport.createdAt ? formatDate(selectedReport.createdAt) : 'Chưa có ngày'}
+                        {selectedReport.createdAt
+                          ? formatDate(selectedReport.createdAt)
+                          : 'Chưa có ngày'}
                       </p>
                     </div>
 
@@ -549,22 +610,56 @@ export default function AdminOrderReportsPage() {
                     <p className="font-medium">{getReportReason(selectedReport)}</p>
                   </div>
 
-                  <Button
-                    className="w-full gap-2"
-                    disabled={
-                      normalizeReportStatus(selectedReport.status || selectedReport.trangThai) === 'approved' ||
-                      approvingId === (selectedReport._id || selectedReport.id || '')
-                    }
-                    onClick={() => {
-                      const reportId = selectedReport._id || selectedReport.id || '';
-                      if (reportId) handleApprove(reportId);
-                    }}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    {approvingId === (selectedReport._id || selectedReport.id || '')
-                      ? 'Đang duyệt...'
-                      : 'Duyệt yêu cầu hủy'}
-                  </Button>
+                  {selectedReport.rejectReason ? (
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="mb-2 text-xs text-muted-foreground">Lý do từ chối</p>
+                      <p className="font-medium">{selectedReport.rejectReason}</p>
+                    </div>
+                  ) : null}
+
+                  {isReportPending(selectedReport) ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Button
+                        className="w-full gap-2"
+                        disabled={
+                          approvingId === (selectedReport._id || selectedReport.id || '') ||
+                          rejectingId === (selectedReport._id || selectedReport.id || '')
+                        }
+                        onClick={() => {
+                          const reportId = selectedReport._id || selectedReport.id || '';
+                          if (reportId) handleApprove(reportId);
+                        }}
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        {approvingId === (selectedReport._id || selectedReport.id || '')
+                          ? 'Đang duyệt...'
+                          : 'Duyệt hủy'}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full gap-2"
+                        disabled={
+                          approvingId === (selectedReport._id || selectedReport.id || '') ||
+                          rejectingId === (selectedReport._id || selectedReport.id || '')
+                        }
+                        onClick={() => {
+                          const reportId = selectedReport._id || selectedReport.id || '';
+                          if (reportId) handleReject(reportId);
+                        }}
+                      >
+                        <XCircle className="h-4 w-4" />
+                        {rejectingId === (selectedReport._id || selectedReport.id || '')
+                          ? 'Đang từ chối...'
+                          : 'Từ chối'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-border bg-secondary/40 p-3 text-sm text-muted-foreground">
+                      Yêu cầu này đã được xử lý.
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

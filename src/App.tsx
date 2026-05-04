@@ -25,8 +25,10 @@ import AdminOrdersPage from "./pages/admin/AdminOrdersPage";
 import AdminOrderReportsPage from "./pages/admin/AdminOrderReportsPage";
 import AdminProductsPage from "./pages/admin/AdminProductsPage";
 import AdminStatsPage from "./pages/admin/AdminStatsPage";
+import AdminVouchersPage from "./pages/admin/AdminVouchersPage";
 import NotFound from "./pages/NotFound";
 import AddressPage from "./pages/AddressPage";
+import VoucherWalletPage from "./pages/VoucherWalletPage";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +54,7 @@ const App = () => (
           <Route path="/dang-ky" element={<RegisterPage />} />
           <Route path="/tai-khoan" element={<AccountPage />} />
           <Route path="/dia-chi" element={<AddressPage />} />
+          <Route path="/vi-voucher" element={<VoucherWalletPage />} />
           <Route path="/yeu-thich" element={<WishlistPage />} />
 
           <Route path="/don-hang" element={<OrderHistory />} />
@@ -67,8 +70,7 @@ const App = () => (
           <Route path="/admin/order-reports" element={<AdminOrderReportsPage />} />
           <Route path="/admin/products" element={<AdminProductsPage />} />
           <Route path="/admin/stats" element={<AdminStatsPage />} />
-
-
+          <Route path="/admin/vouchers" element={<AdminVouchersPage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

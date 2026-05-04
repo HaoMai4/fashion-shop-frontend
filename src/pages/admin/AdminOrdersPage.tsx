@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, Eye, RefreshCw, ShoppingBag } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Eye,
+  RefreshCw,
+  ShoppingBag,
+} from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -108,6 +116,7 @@ type TabsRecord = {
   all?: number;
   pending?: number;
   confirmed?: number;
+  reported?: number;
   shipped?: number;
   delivered?: number;
   completed?: number;
@@ -140,6 +149,7 @@ const statusOptions = [
 const filterTabs = [
   { value: 'all', label: 'Tất cả' },
   { value: 'pending', label: 'Chờ xác nhận' },
+  { value: 'reported', label: 'Yêu cầu hủy' },
   { value: 'confirmed', label: 'Đã xác nhận' },
   { value: 'shipped', label: 'Đang giao' },
   { value: 'delivered', label: 'Đã giao' },
@@ -148,7 +158,7 @@ const filterTabs = [
 ] as const;
 
 type AdminOrderStatus = (typeof statusOptions)[number]['value'];
-type OrderFilterStatus = 'all' | AdminOrderStatus;
+type OrderFilterStatus = 'all' | AdminOrderStatus | 'reported';
 
 function normalizeOrderStatus(raw?: string) {
   if (!raw) return '';
@@ -177,6 +187,11 @@ function normalizeOrderStatus(raw?: string) {
     hoan_thanh: 'completed',
     'hoàn thành': 'completed',
 
+    reported: 'reported',
+    report: 'reported',
+    yeu_cau_huy: 'reported',
+    'yêu cầu hủy': 'reported',
+
     cancelled: 'cancelled',
     canceled: 'cancelled',
     da_huy: 'cancelled',
@@ -194,6 +209,7 @@ function getStatusBadgeInfo(status?: string) {
     { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
   > = {
     pending: { label: 'Chờ xác nhận', variant: 'secondary' },
+    reported: { label: 'Yêu cầu hủy', variant: 'secondary' },
     confirmed: { label: 'Đã xác nhận', variant: 'default' },
     shipped: { label: 'Đang giao', variant: 'default' },
     delivered: { label: 'Đã giao', variant: 'outline' },
@@ -207,29 +223,35 @@ function getStatusBadgeInfo(status?: string) {
 function getCustomerName(order: AdminOrderRecord) {
   if (order.shippingAddress?.fullName) return order.shippingAddress.fullName;
   if (order.guestInfo?.fullName) return order.guestInfo.fullName;
+
   if (order.userId && typeof order.userId === 'object') {
     const fullName = `${order.userId.firstName || ''} ${order.userId.lastName || ''}`.trim();
     if (fullName) return fullName;
     if (order.userId.email) return order.userId.email;
   }
+
   return 'Chưa rõ';
 }
 
 function getCustomerPhone(order: AdminOrderRecord) {
   if (order.shippingAddress?.phone) return order.shippingAddress.phone;
   if (order.guestInfo?.phone) return order.guestInfo.phone;
+
   if (order.userId && typeof order.userId === 'object' && order.userId.phone) {
     return order.userId.phone;
   }
+
   return 'Chưa rõ';
 }
 
 function getCustomerEmail(order: AdminOrderRecord) {
   if (order.shippingAddress?.email) return order.shippingAddress.email;
   if (order.guestInfo?.email) return order.guestInfo.email;
+
   if (order.userId && typeof order.userId === 'object' && order.userId.email) {
     return order.userId.email;
   }
+
   return 'Chưa rõ';
 }
 
@@ -286,8 +308,18 @@ function getAddressText(order: AdminOrderRecord) {
 
 function getStatusLabel(status?: string) {
   const normalized = normalizeOrderStatus(status);
-  const found = statusOptions.find((item) => item.value === normalized);
-  return found?.label || 'Cập nhật';
+
+  const map: Record<string, string> = {
+    pending: 'Chờ xác nhận',
+    reported: 'Yêu cầu hủy',
+    confirmed: 'Đã xác nhận',
+    shipped: 'Đang giao',
+    delivered: 'Đã giao',
+    completed: 'Hoàn thành',
+    cancelled: 'Đã hủy',
+  };
+
+  return map[normalized] || 'Cập nhật';
 }
 
 export default function AdminOrdersPage() {
@@ -307,11 +339,22 @@ export default function AdminOrdersPage() {
 
   const fetchTabCounts = async () => {
     try {
-      const res = (await orderService.getAdminOrders({
-        countsOnly: true,
-      })) as { tabs?: TabsRecord };
+      const [res, reportedRes] = await Promise.all([
+        orderService.getAdminOrders({
+          countsOnly: true,
+        }) as Promise<{ tabs?: TabsRecord }>,
 
-      setTabs(res?.tabs || {});
+        orderService.getAdminOrders({
+          page: 1,
+          limit: 1,
+          status: 'reported',
+        }) as Promise<AdminOrdersResponse>,
+      ]);
+
+      setTabs({
+        ...(res?.tabs || {}),
+        reported: reportedRes?.meta?.total || 0,
+      });
     } catch (error: any) {
       console.error('getAdminOrders counts error:', error);
     }
@@ -322,6 +365,7 @@ export default function AdminOrdersPage() {
     status: OrderFilterStatus = filterStatus
   ) => {
     setLoading(true);
+
     try {
       const res = (await orderService.getAdminOrders({
         page: targetPage,
@@ -329,12 +373,17 @@ export default function AdminOrdersPage() {
         status: status !== 'all' ? status : undefined,
       })) as AdminOrdersResponse;
 
-      setOrders(Array.isArray(res?.data) ? res.data : []);
+      const list = Array.isArray(res?.data) ? res.data : [];
+
+      setOrders(list);
       setPages(res?.meta?.pages || 1);
 
       if (currentSelectedId) {
-        const found = (res?.data || []).find((item) => (item._id || item.id) === currentSelectedId);
-        if (found) setSelectedOrder(found);
+        const found = list.find((item) => (item._id || item.id) === currentSelectedId);
+
+        if (found) {
+          setSelectedOrder(found);
+        }
       }
     } catch (error: any) {
       console.error('getAdminOrders error:', error);
@@ -362,6 +411,7 @@ export default function AdminOrdersPage() {
     orderStatus: AdminOrderStatus
   ) => {
     setUpdatingOrderId(orderId);
+
     try {
       await orderService.updateOrderStatus(orderId, { orderStatus });
       toast.success('Cập nhật trạng thái đơn hàng thành công');
@@ -396,7 +446,7 @@ export default function AdminOrdersPage() {
           </Button>
         </div>
 
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
           {filterTabs.map((tab) => (
             <button
               key={tab.value}
@@ -413,7 +463,9 @@ export default function AdminOrdersPage() {
             >
               <p className="text-xs text-muted-foreground">{tab.label}</p>
               <p className="mt-1 text-xl font-bold">
-                {tab.value === 'all' ? tabs.all || 0 : tabs[tab.value as keyof TabsRecord] || 0}
+                {tab.value === 'all'
+                  ? tabs.all || 0
+                  : tabs[tab.value as keyof TabsRecord] || 0}
               </p>
             </button>
           ))}
@@ -433,7 +485,9 @@ export default function AdminOrdersPage() {
               ) : orders.length === 0 ? (
                 <div className="py-12 text-center">
                   <ShoppingBag className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
-                  <p className="text-sm text-muted-foreground">Không có đơn hàng phù hợp</p>
+                  <p className="text-sm text-muted-foreground">
+                    Không có đơn hàng phù hợp
+                  </p>
                 </div>
               ) : (
                 <>
@@ -445,7 +499,9 @@ export default function AdminOrdersPage() {
                         <TableHead>Ngày đặt</TableHead>
                         <TableHead>Thanh toán</TableHead>
                         <TableHead>Tổng tiền</TableHead>
-                        <TableHead className="w-[170px] text-center">Cập nhật</TableHead>
+                        <TableHead className="w-[170px] text-center">
+                          Cập nhật
+                        </TableHead>
                         <TableHead className="w-[90px] text-center">Xem</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -454,6 +510,7 @@ export default function AdminOrdersPage() {
                       {orders.map((order) => {
                         const orderId = order._id || order.id || '';
                         const normalizedCurrentStatus = normalizeOrderStatus(order.orderStatus);
+                        const isReportedOrder = normalizedCurrentStatus === 'reported';
 
                         return (
                           <TableRow key={orderId}>
@@ -463,7 +520,9 @@ export default function AdminOrdersPage() {
 
                             <TableCell>
                               <div>
-                                <p className="text-sm font-medium">{getCustomerName(order)}</p>
+                                <p className="text-sm font-medium">
+                                  {getCustomerName(order)}
+                                </p>
                                 <p className="text-xs text-muted-foreground">
                                   {getCustomerPhone(order)}
                                 </p>
@@ -485,44 +544,57 @@ export default function AdminOrdersPage() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={updatingOrderId === orderId}
-                                    className="mx-auto h-9 min-w-[140px] justify-between gap-2 rounded-lg"
-                                  >
-                                    <span className="truncate text-left">
-                                      {updatingOrderId === orderId
-                                        ? 'Đang cập nhật...'
-                                        : getStatusLabel(order.orderStatus)}
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 shrink-0" />
-                                  </Button>
-                                </DropdownMenuTrigger>
+                              {isReportedOrder ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="mx-auto h-9 min-w-[140px] justify-center gap-2 rounded-lg border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                  onClick={() => setSelectedOrder(order)}
+                                >
+                                  <AlertTriangle className="h-4 w-4" />
+                                  Yêu cầu hủy
+                                </Button>
+                              ) : (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={updatingOrderId === orderId}
+                                      className="mx-auto h-9 min-w-[140px] justify-between gap-2 rounded-lg"
+                                    >
+                                      <span className="truncate text-left">
+                                        {updatingOrderId === orderId
+                                          ? 'Đang cập nhật...'
+                                          : getStatusLabel(order.orderStatus)}
+                                      </span>
+                                      <ChevronDown className="h-4 w-4 shrink-0" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
 
-                                <DropdownMenuContent align="center" className="w-52">
-                                  {statusOptions.map((option) => {
-                                    const isCurrent = normalizedCurrentStatus === option.value;
+                                  <DropdownMenuContent align="center" className="w-52">
+                                    {statusOptions.map((option) => {
+                                      const isCurrent =
+                                        normalizedCurrentStatus === option.value;
 
-                                    return (
-                                      <DropdownMenuItem
-                                        key={option.value}
-                                        onClick={() => {
-                                          if (!isCurrent) {
-                                            handleChangeStatus(orderId, option.value);
-                                          }
-                                        }}
-                                        className="flex items-center justify-between gap-3"
-                                      >
-                                        <span>{option.label}</span>
-                                        {isCurrent ? <Check className="h-4 w-4" /> : null}
-                                      </DropdownMenuItem>
-                                    );
-                                  })}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                      return (
+                                        <DropdownMenuItem
+                                          key={option.value}
+                                          onClick={() => {
+                                            if (!isCurrent) {
+                                              handleChangeStatus(orderId, option.value);
+                                            }
+                                          }}
+                                          className="flex items-center justify-between gap-3"
+                                        >
+                                          <span>{option.label}</span>
+                                          {isCurrent ? <Check className="h-4 w-4" /> : null}
+                                        </DropdownMenuItem>
+                                      );
+                                    })}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </TableCell>
 
                             <TableCell className="text-center">
@@ -574,7 +646,9 @@ export default function AdminOrdersPage() {
           <Card className="h-fit self-start xl:sticky xl:top-24">
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-base leading-tight">Chi tiết đơn hàng</CardTitle>
+                <CardTitle className="text-base leading-tight">
+                  Chi tiết đơn hàng
+                </CardTitle>
 
                 {selectedOrder ? (
                   <Badge
@@ -594,16 +668,49 @@ export default function AdminOrdersPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {normalizeOrderStatus(selectedOrder.orderStatus) === 'reported' ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                          <p className="font-semibold">
+                            Đơn hàng này đang có yêu cầu hủy
+                          </p>
+                          <p className="mt-1">
+                            Đây vẫn là đơn hàng gốc. Yêu cầu hủy chỉ là thông tin
+                            xử lý đi kèm đơn hàng, không phải một đơn mới.
+                          </p>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-3 border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+                            asChild
+                          >
+                            <Link to="/admin/order-reports">
+                              Xem yêu cầu hủy
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="grid grid-cols-1 gap-3">
                     <div>
                       <p className="text-xs text-muted-foreground">Mã đơn hàng</p>
-                      <p className="font-semibold">{selectedOrder.orderCode || 'Chưa có mã'}</p>
+                      <p className="font-semibold">
+                        {selectedOrder.orderCode || 'Chưa có mã'}
+                      </p>
                     </div>
 
                     <div>
                       <p className="text-xs text-muted-foreground">Ngày đặt</p>
                       <p className="font-semibold">
-                        {selectedOrder.createdAt ? formatDate(selectedOrder.createdAt) : 'Chưa có ngày'}
+                        {selectedOrder.createdAt
+                          ? formatDate(selectedOrder.createdAt)
+                          : 'Chưa có ngày'}
                       </p>
                     </div>
 
@@ -619,7 +726,9 @@ export default function AdminOrdersPage() {
 
                     <div>
                       <p className="text-xs text-muted-foreground">Email</p>
-                      <p className="font-medium break-all">{getCustomerEmail(selectedOrder)}</p>
+                      <p className="font-medium break-all">
+                        {getCustomerEmail(selectedOrder)}
+                      </p>
                     </div>
 
                     <div>
@@ -629,7 +738,9 @@ export default function AdminOrdersPage() {
 
                     <div>
                       <p className="text-xs text-muted-foreground">Thanh toán</p>
-                      <p className="font-medium">{getPaymentType(selectedOrder.paymentMethod)}</p>
+                      <p className="font-medium">
+                        {getPaymentType(selectedOrder.paymentMethod)}
+                      </p>
                     </div>
 
                     {selectedOrder.customerNote ? (
@@ -651,7 +762,9 @@ export default function AdminOrdersPage() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
-                              <p className="line-clamp-1 text-sm font-semibold">{getItemName(item)}</p>
+                              <p className="line-clamp-1 text-sm font-semibold">
+                                {getItemName(item)}
+                              </p>
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {getItemColor(item)}
                                 {getItemColor(item) && getItemSize(item) ? ' / ' : ''}
