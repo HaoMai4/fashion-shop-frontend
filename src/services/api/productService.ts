@@ -103,6 +103,20 @@ export type UpdateAdminVariantPayload = {
   action?: "merge" | "replace";
 };
 
+export type SearchHistoryItem = {
+  _id: string;
+  keyword: string;
+  normalizedKeyword: string;
+  count?: number;
+  lastSearchedAt?: string;
+};
+
+export type SearchSuggestionResponse = {
+  query: string;
+  products: SanPham[];
+  keywordSuggestions: string[];
+};
+
 type ProductColorOption = {
   ten: string;
   ma: string;
@@ -172,26 +186,66 @@ function matchSize(product: SanPham, sizes: string[]) {
   return sizes.some((size) => productSizes.includes(normalizeText(size)));
 }
 
+function matchSearchKeyword(product: SanPham, rawKeyword: string) {
+  const keyword = normalizeText(rawKeyword);
+
+  if (!keyword) return true;
+
+  const searchableText = [
+    product.ten,
+    product.slug,
+    product.moTa,
+    product.moTaChiTiet,
+    product.danhMuc,
+    product.thuongHieu,
+    product.chatLieu,
+    product.gioiTinh,
+    ...(Array.isArray(product.tags) ? product.tags : []),
+  ]
+    .map(normalizeText)
+    .join(" ");
+
+  if (searchableText.includes(keyword)) {
+    return true;
+  }
+
+  const keywordVariants = Array.from(
+    new Set(
+      [
+        keyword,
+        keyword.replace(/^(ao|quan|do)\s+/g, "").trim(),
+        keyword.replace(/\b(ao|quan|do|san|pham)\b/g, " ").replace(/\s+/g, " ").trim(),
+      ].filter(Boolean)
+    )
+  );
+
+  if (keywordVariants.some((variant) => searchableText.includes(variant))) {
+    return true;
+  }
+
+  const tokens = keyword
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  if (!tokens.length) return true;
+
+  const stopWords = ["ao", "quan", "do", "san", "pham"];
+  const meaningfulTokens = tokens.filter((token) => !stopWords.includes(token));
+  const tokensToCheck = meaningfulTokens.length ? meaningfulTokens : tokens;
+
+  return tokensToCheck.every((token) => searchableText.includes(token));
+}
+
 function applyLocalFilters(products: SanPham[], filter?: ProductFilter) {
   if (!filter) return products;
 
   let result = [...products];
 
   if (filter.timKiem) {
-    const keyword = normalizeText(filter.timKiem);
-
-    result = result.filter((product) => {
-      const values = [
-        product.ten,
-        product.slug,
-        product.moTa,
-        product.danhMuc,
-        product.thuongHieu,
-        ...(Array.isArray(product.tags) ? product.tags : []),
-      ];
-
-      return values.some((value) => normalizeText(value).includes(keyword));
-    });
+    result = result.filter((product) =>
+      matchSearchKeyword(product, filter.timKiem!)
+    );
   }
 
   if (filter.gioiTinh) {
@@ -723,6 +777,97 @@ export const productService = {
   async search(query: string): Promise<SanPham[]> {
     const allProducts = await productService.getAll({ timKiem: query });
     return allProducts;
+  },
+
+  async getSearchSuggestions(
+    query: string,
+    limit = 6
+  ): Promise<SearchSuggestionResponse> {
+    const qs = new URLSearchParams();
+
+    if (query.trim()) {
+      qs.set("q", query.trim());
+    }
+
+    qs.set("limit", String(limit));
+
+    const res = await apiRequest<{
+      query?: string;
+      products?: BackendProduct[];
+      keywordSuggestions?: string[];
+    }>(`/api/products/suggestions?${qs.toString()}`);
+
+    return {
+      query: res.query || query,
+      products: (res.products || []).map(mapBackendProductToSanPham),
+      keywordSuggestions: Array.isArray(res.keywordSuggestions)
+        ? res.keywordSuggestions
+        : [],
+    };
+  },
+
+  async getSearchHistory(limit = 8): Promise<SearchHistoryItem[]> {
+    try {
+      const res = await apiRequest<{ history?: SearchHistoryItem[] }>(
+        `/api/products/search-history?limit=${limit}`,
+        {
+          auth: true,
+        }
+      );
+
+      return Array.isArray(res.history) ? res.history : [];
+    } catch (error) {
+      console.warn("getSearchHistory error:", error);
+      return [];
+    }
+  },
+
+  async saveSearchHistory(keyword: string) {
+    const trimmed = keyword.trim();
+
+    if (!trimmed || trimmed.length < 2) {
+      return null;
+    }
+
+    try {
+      return await apiRequest("/api/products/search-history", {
+        method: "POST",
+        body: JSON.stringify({ keyword: trimmed }),
+        auth: true,
+      });
+    } catch (error) {
+      console.warn("saveSearchHistory error:", error);
+      return null;
+    }
+  },
+
+  async clearSearchHistory() {
+    try {
+      return await apiRequest("/api/products/search-history", {
+        method: "DELETE",
+        auth: true,
+      });
+    } catch (error) {
+      console.warn("clearSearchHistory error:", error);
+      return null;
+    }
+  },
+
+  async deleteSearchHistoryItem(id: string) {
+    if (!id) return null;
+
+    try {
+      return await apiRequest(
+        `/api/products/search-history/item/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          auth: true,
+        }
+      );
+    } catch (error) {
+      console.warn("deleteSearchHistoryItem error:", error);
+      return null;
+    }
   },
 
   async getVariantDetails(variantId: string, size?: string) {

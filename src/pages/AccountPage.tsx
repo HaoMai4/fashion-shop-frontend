@@ -7,7 +7,6 @@ import {
   Heart,
   Package,
   TicketPercent,
-  Briefcase,
   ShieldCheck,
   ShoppingBag,
   Save,
@@ -113,7 +112,9 @@ export default function AccountPage() {
 
   const [user, setUser] = useState<UserProfile | null>(getStoredUser());
   const [defaultAddress, setDefaultAddress] = useState<UserAddress | null>(null);
-  const [form, setForm] = useState<ProfileForm>(() => buildFormFromUser(getStoredUser()));
+  const [form, setForm] = useState<ProfileForm>(() =>
+    buildFormFromUser(getStoredUser())
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -245,14 +246,6 @@ export default function AccountPage() {
           navigate('/vi-voucher');
         },
       },
-      {
-        key: 'ai-history',
-        label: 'Lịch sử AI tư vấn',
-        icon: <Briefcase className="h-5 w-5 text-slate-500" />,
-        action: () => {
-          toast.info('Phần lịch sử AI tư vấn sẽ làm ở bước sau');
-        },
-      },
     ];
 
     if (isAdmin) {
@@ -317,7 +310,11 @@ export default function AccountPage() {
               <div>
                 <h1 className="text-3xl font-bold">{fullName}</h1>
                 <p className="text-muted-foreground">{email}</p>
-                <p className={`mt-1 text-sm ${isAdmin ? 'text-blue-600' : 'text-amber-600'}`}>
+                <p
+                  className={`mt-1 text-sm ${
+                    isAdmin ? 'text-blue-600' : 'text-amber-600'
+                  }`}
+                >
                   {getRoleLabel(user.role)}
                 </p>
               </div>
@@ -403,7 +400,9 @@ export default function AccountPage() {
                 <Input
                   id="firstName"
                   value={form.firstName}
-                  onChange={(event) => handleChange('firstName', event.target.value)}
+                  onChange={(event) =>
+                    handleChange('firstName', event.target.value)
+                  }
                   placeholder="Ví dụ: Mai Nhật"
                 />
               </div>
@@ -413,7 +412,9 @@ export default function AccountPage() {
                 <Input
                   id="lastName"
                   value={form.lastName}
-                  onChange={(event) => handleChange('lastName', event.target.value)}
+                  onChange={(event) =>
+                    handleChange('lastName', event.target.value)
+                  }
                   placeholder="Ví dụ: Hào"
                 />
               </div>
@@ -436,7 +437,9 @@ export default function AccountPage() {
                 <Input
                   id="phone"
                   value={form.phone}
-                  onChange={(event) => handleChange('phone', event.target.value)}
+                  onChange={(event) =>
+                    handleChange('phone', event.target.value)
+                  }
                   placeholder="Ví dụ: 0909123456"
                 />
               </div>
@@ -446,7 +449,9 @@ export default function AccountPage() {
                 <select
                   id="gender"
                   value={form.gender}
-                  onChange={(event) => handleChange('gender', event.target.value)}
+                  onChange={(event) =>
+                    handleChange('gender', event.target.value)
+                  }
                   className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <option value="">Chưa cập nhật</option>
@@ -462,7 +467,9 @@ export default function AccountPage() {
                   id="dateOfBirth"
                   type="date"
                   value={form.dateOfBirth}
-                  onChange={(event) => handleChange('dateOfBirth', event.target.value)}
+                  onChange={(event) =>
+                    handleChange('dateOfBirth', event.target.value)
+                  }
                 />
               </div>
 
@@ -477,12 +484,16 @@ export default function AccountPage() {
               </div>
 
               <div>
-                <p className="text-sm text-muted-foreground">Giới tính hiện tại</p>
+                <p className="text-sm text-muted-foreground">
+                  Giới tính hiện tại
+                </p>
                 <p className="font-medium">{getGenderLabel(user.gender)}</p>
               </div>
 
               <div>
-                <p className="text-sm text-muted-foreground">Ngày sinh hiện tại</p>
+                <p className="text-sm text-muted-foreground">
+                  Ngày sinh hiện tại
+                </p>
                 <p className="font-medium">{formatDate(user.dateOfBirth)}</p>
               </div>
 
