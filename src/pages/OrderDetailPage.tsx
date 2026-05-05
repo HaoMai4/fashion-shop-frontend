@@ -30,6 +30,19 @@ type ShippingAddress = {
   postalCode?: string;
 };
 
+type VoucherSnapshot = {
+  voucherId?: string;
+  code?: string;
+  type?: 'percent' | 'fixed' | string;
+  value?: number;
+  discountAmount?: number;
+  totalBeforeVoucher?: number;
+  totalAfterVoucher?: number;
+  appliedItems?: any[];
+  redeemed?: boolean;
+  redeemedAt?: string;
+};
+
 type OrderItem = {
   _id?: string;
   id?: string;
@@ -100,9 +113,14 @@ type OrderRecord = {
   subtotal?: number;
   shippingFee?: number;
   discount?: number;
+  voucherDiscount?: number;
+  discountAmount?: number;
   totalAmount?: number;
   tongTien?: number;
   finalTotal?: number;
+
+  voucher?: VoucherSnapshot | null;
+  voucherCode?: string;
 
   customerNote?: string;
   guestInfo?: {
@@ -270,7 +288,7 @@ function getPaymentStatus(order?: OrderRecord | null) {
     cancelled: 'Đã hủy thanh toán',
   };
 
-  return map[value] || (payment.status || 'Chưa rõ');
+  return map[value] || payment.status || 'Chưa rõ';
 }
 
 function getOrderItems(order?: OrderRecord | null): OrderItem[] {
@@ -342,21 +360,69 @@ function getItemPrice(item: OrderItem) {
   return item.finalPrice || item.price || item.gia || 0;
 }
 
+function toMoney(value: unknown) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function getVoucher(order?: OrderRecord | null) {
+  if (!order?.voucher || typeof order.voucher !== 'object') return null;
+  return order.voucher;
+}
+
+function getVoucherCode(order?: OrderRecord | null) {
+  const voucher = getVoucher(order);
+  return voucher?.code || order?.voucherCode || '';
+}
+
+function getVoucherDiscount(order?: OrderRecord | null) {
+  const voucher = getVoucher(order);
+
+  const snapshotDiscount = toMoney(voucher?.discountAmount);
+  if (snapshotDiscount > 0) return snapshotDiscount;
+
+  const voucherDiscount = toMoney(order?.voucherDiscount);
+  if (voucherDiscount > 0) return voucherDiscount;
+
+  const discountAmount = toMoney(order?.discountAmount);
+  if (discountAmount > 0) return discountAmount;
+
+  return 0;
+}
+
 function getSubtotal(order?: OrderRecord | null) {
-  return order?.subtotal || 0;
+  if (!order) return 0;
+
+  const subtotal = toMoney(order.subtotal);
+  if (subtotal > 0) return subtotal;
+
+  const voucher = getVoucher(order);
+  const totalBeforeVoucher = toMoney(voucher?.totalBeforeVoucher);
+  if (totalBeforeVoucher > 0) return totalBeforeVoucher;
+
+  return getOrderItems(order).reduce((sum, item) => {
+    return sum + getItemPrice(item) * getItemQuantity(item);
+  }, 0);
 }
 
 function getShippingFee(order?: OrderRecord | null) {
-  return order?.shippingFee || 0;
+  return toMoney(order?.shippingFee);
 }
 
 function getDiscount(order?: OrderRecord | null) {
-  return order?.discount || 0;
+  const voucherDiscount = getVoucherDiscount(order);
+  if (voucherDiscount > 0) return voucherDiscount;
+
+  return toMoney(order?.discount);
 }
 
 function getTotal(order?: OrderRecord | null) {
   if (!order) return 0;
-  return order.finalTotal || order.totalAmount || order.tongTien || 0;
+
+  const explicitTotal = toMoney(order.finalTotal || order.totalAmount || order.tongTien);
+  if (explicitTotal > 0) return explicitTotal;
+
+  return Math.max(getSubtotal(order) - getDiscount(order), 0) + getShippingFee(order);
 }
 
 function getAddressText(order?: OrderRecord | null) {
@@ -513,6 +579,8 @@ export default function OrderDetailPage() {
   const allowRequestCancellation = canRequestCancellation(order);
   const cancellationRequested = isCancellationRequested(order);
   const cancelled = isCancelled(order);
+  const voucherCode = getVoucherCode(order);
+  const discountAmount = getDiscount(order);
 
   return (
     <MainLayout>
@@ -736,14 +804,20 @@ export default function OrderDetailPage() {
               <span>{formatPrice(getSubtotal(order))}</span>
             </div>
 
+            {discountAmount > 0 ? (
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">
+                  {voucherCode ? `Mã giảm giá (${voucherCode})` : 'Giảm giá'}
+                </span>
+                <span className="font-medium text-emerald-600">
+                  - {formatPrice(discountAmount)}
+                </span>
+              </div>
+            ) : null}
+
             <div className="flex justify-between">
               <span className="text-muted-foreground">Phí vận chuyển</span>
               <span>{formatPrice(getShippingFee(order))}</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Giảm giá</span>
-              <span>- {formatPrice(getDiscount(order))}</span>
             </div>
 
             <div className="flex justify-between border-t border-border pt-3 text-base font-bold">

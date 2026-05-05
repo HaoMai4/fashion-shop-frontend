@@ -95,6 +95,8 @@ export const orderService = {
     sortOrder?: "asc" | "desc";
     export?: "csv";
     countsOnly?: boolean;
+    dateFrom?: string;
+    dateTo?: string;
   }) {
     const qs = new URLSearchParams();
 
@@ -105,6 +107,8 @@ export const orderService = {
     if (params?.sortOrder) qs.set("sortOrder", params.sortOrder);
     if (params?.export) qs.set("export", params.export);
     if (params?.countsOnly) qs.set("countsOnly", "true");
+    if (params?.dateFrom) qs.set("dateFrom", params.dateFrom);
+    if (params?.dateTo) qs.set("dateTo", params.dateTo);
 
     const queryString = qs.toString();
 
