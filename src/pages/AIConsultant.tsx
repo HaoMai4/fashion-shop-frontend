@@ -14,6 +14,8 @@ import MainLayout from "@/components/layout/MainLayout";
 import { ChatMessage } from "@/types";
 import {
   chatbotService,
+  type ChatbotFilters,
+  type ChatbotConversationMessage,
   type RecommendedChatProduct,
 } from "@/services/api/chatbotService";
 import { formatPrice } from "@/utils/format";
@@ -80,6 +82,7 @@ export default function AIConsultant() {
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [contextFilters, setContextFilters] = useState<ChatbotFilters>(null);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const hasMountedRef = useRef(false);
@@ -103,6 +106,19 @@ export default function AIConsultant() {
     });
   }, [messages, loading]);
 
+  const buildConversationPayload = (
+    currentMessages: ChatMessage[],
+    nextMessage: ChatMessage
+  ): ChatbotConversationMessage[] => {
+    return [...currentMessages, nextMessage]
+      .filter((message) => message.role === "user" || message.role === "bot")
+      .slice(-8)
+      .map((message) => ({
+        role: message.role === "bot" ? "assistant" : "user",
+        content: message.content,
+      }));
+  };
+
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
@@ -114,15 +130,20 @@ export default function AIConsultant() {
       timestamp: new Date().toISOString(),
     };
 
+    const conversationPayload = buildConversationPayload(messages, userMessage);
+
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
     try {
       const response = await chatbotService.sendMessage({
-        messages: [{ role: "user", content: trimmed }],
+        messages: conversationPayload,
+        contextFilters,
         limit: 6,
       });
+
+      setContextFilters(response.filters || null);
 
       const botMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -220,16 +241,14 @@ export default function AIConsultant() {
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                      msg.role === "user"
-                        ? "rounded-br-md bg-accent text-accent-foreground"
-                        : "rounded-bl-md bg-secondary text-secondary-foreground"
-                    }`}
+                    className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${msg.role === "user"
+                      ? "rounded-br-md bg-accent text-accent-foreground"
+                      : "rounded-bl-md bg-secondary text-secondary-foreground"
+                      }`}
                   >
                     <p className="whitespace-pre-wrap">
                       {msg.content.replace(/\*\*(.*?)\*\*/g, "$1")}

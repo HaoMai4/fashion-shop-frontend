@@ -1,5 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8686";
 const CHAT_SEARCH_PATH = "/api/chat/search";
+const TOKEN_KEY = "stylehub_token";
+const LEGACY_TOKEN_KEY = "token";
 
 export type ChatbotConversationMessage = {
   role: "user" | "assistant" | "bot";
@@ -73,6 +75,10 @@ type BackendChatResponse = {
   message?: string;
 };
 
+function getAuthToken() {
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
+}
+
 function normalizeRole(role: ChatbotConversationMessage["role"]) {
   if (role === "bot") return "assistant";
   return role;
@@ -88,12 +94,12 @@ function mapBackendProduct(product: BackendChatProduct): RecommendedChatProduct 
     typeof product.finalPrice === "number"
       ? product.finalPrice
       : typeof product.variant?.chosenSize?.finalPrice === "number"
-      ? product.variant?.chosenSize?.finalPrice
-      : typeof product.discountPrice === "number"
-      ? product.discountPrice
-      : typeof product.originalPrice === "number"
-      ? product.originalPrice
-      : 0;
+        ? product.variant.chosenSize.finalPrice
+        : typeof product.discountPrice === "number"
+          ? product.discountPrice
+          : typeof product.originalPrice === "number"
+            ? product.originalPrice
+            : 0;
 
   const giaGoc =
     typeof product.originalPrice === "number" && product.originalPrice > gia
@@ -147,11 +153,19 @@ export const chatbotService = {
       sortOrder: request.sortOrder,
     };
 
+    const token = getAuthToken();
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${API_BASE_URL}${CHAT_SEARCH_PATH}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 

@@ -157,6 +157,7 @@ function ProductSection({
 
 export default function Index() {
   const [allProducts, setAllProducts] = useState<SanPham[]>([]);
+  const [forYouProducts, setForYouProducts] = useState<SanPham[]>([]);
   const [bestSellers, setBestSellers] = useState<SanPham[]>([]);
   const [newArrivals, setNewArrivals] = useState<SanPham[]>([]);
   const [saleItems, setSaleItems] = useState<SanPham[]>([]);
@@ -175,9 +176,10 @@ export default function Index() {
     let mounted = true;
 
     async function loadHomepageData() {
-      const [allResult, bestSellerResult, newArrivalResult, saleResult] =
+      const [allResult, forYouResult, bestSellerResult, newArrivalResult, saleResult] =
         await Promise.allSettled([
           productService.getAll(),
+          productService.getForYou(10),
           productService.getBestSellers(),
           productService.getNewArrivals(),
           productService.getSaleItems()
@@ -191,6 +193,12 @@ export default function Index() {
           : [];
 
       setAllProducts(all);
+
+      setForYouProducts(
+        forYouResult.status === 'fulfilled' && Array.isArray(forYouResult.value)
+          ? forYouResult.value
+          : []
+      );
 
       setBestSellers(
         bestSellerResult.status === 'fulfilled' && Array.isArray(bestSellerResult.value)
@@ -261,6 +269,8 @@ export default function Index() {
 
   const slide = heroSlides[heroIndex];
 
+  const forYouDisplayProducts = uniqueById(forYouProducts).slice(0, 10);
+
   const bestSellerProducts = bestSellers
     .filter((product) => (product.daBan || 0) > 0)
     .sort((a, b) => (b.daBan || 0) - (a.daBan || 0))
@@ -280,9 +290,8 @@ export default function Index() {
         {heroSlides.map((heroSlide, index) => (
           <div
             key={index}
-            className={`absolute inset-0 transition-opacity duration-700 ${
-              index === heroIndex ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
+            className={`absolute inset-0 transition-opacity duration-700 ${index === heroIndex ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
           >
             <img
               src={heroSlide.image}
@@ -333,11 +342,10 @@ export default function Index() {
               key={index}
               type="button"
               onClick={() => setHeroIndex(index)}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                index === heroIndex
-                  ? 'w-7 bg-accent'
-                  : 'w-1.5 bg-primary-foreground/30 hover:bg-primary-foreground/50'
-              }`}
+              className={`h-1.5 rounded-full transition-all duration-300 ${index === heroIndex
+                ? 'w-7 bg-accent'
+                : 'w-1.5 bg-primary-foreground/30 hover:bg-primary-foreground/50'
+                }`}
               aria-label={`Chuyển đến slide ${index + 1}`}
             />
           ))}
@@ -379,6 +387,17 @@ export default function Index() {
         </div>
       </section>
 
+      <ProductSection
+        title="Dành cho bạn"
+        subtitle="Gợi ý dựa trên giỏ hàng, yêu thích, lịch sử mua và sản phẩm đã xem"
+        products={forYouDisplayProducts}
+        viewAllLink="/san-pham"
+        icon={<Bot className="h-4 w-4 text-accent" />}
+        onAddToCart={handleAddToCart}
+        onToggleWishlist={handleToggleWishlist}
+        isWishlisted={isInWishlist}
+      />
+      
       <ProductSection
         title="Sản phẩm bán chạy"
         subtitle="Sắp xếp theo số lượng sản phẩm đã bán"

@@ -310,6 +310,27 @@ export default function ProductDetail() {
     );
   };
 
+  const buildProductAiPrompt = () => {
+    const categoryText = product.danhMuc || 'sản phẩm thời trang';
+    const brandText = product.thuongHieu || '';
+    const materialText = product.chatLieu || '';
+    const colorText = selectedColor || '';
+    const sizeText = selectedSize || '';
+    const priceText = displayPrice ? formatPrice(displayPrice) : '';
+
+    return [
+      `Gợi ý cách phối đồ và sản phẩm tương tự cho ${categoryText}.`,
+      brandText ? `Thương hiệu: ${brandText}.` : '',
+      materialText ? `Chất liệu: ${materialText}.` : '',
+      colorText ? `Màu: ${colorText}.` : '',
+      sizeText ? `Size: ${sizeText}.` : '',
+      priceText ? `Giá khoảng: ${priceText}.` : '',
+      'Ưu tiên sản phẩm cùng danh mục hoặc dễ phối cùng, không chỉ tìm lại đúng sản phẩm đang xem.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  };
+
   const handleBuyNow = () => {
     if (!product || !selectedVariant?.id || !selectedSize || !canAddToCart) {
       toast.error('Vui lòng chọn đầy đủ màu, size và số lượng hợp lệ');
@@ -832,20 +853,17 @@ export default function ProductDetail() {
                 <Bot className="h-5 w-5 text-primary" />
                 <p className="font-semibold">Cần tư vấn thêm?</p>
               </div>
+
               <p className="text-sm leading-6 text-muted-foreground">
-                Bạn có thể hỏi AI về cách phối đồ, chọn size hoặc sản phẩm phù hợp
-                với nhu cầu của mình.
+                Bạn có thể hỏi AI để gợi ý cách phối đồ, dịp sử dụng phù hợp hoặc sản phẩm tương tự.
               </p>
+
               <Button
                 variant="outline"
                 className="mt-4"
-                onClick={() =>
-                  askAiInWidget(
-                    `Tư vấn giúp tôi sản phẩm ${product.ten}, màu ${selectedColor}, size ${selectedSize}`
-                  )
-                }
+                onClick={() => askAiInWidget(buildProductAiPrompt())}
               >
-                Hỏi AI về sản phẩm này
+                Gợi ý phối đồ / sản phẩm tương tự
               </Button>
             </div>
           </div>

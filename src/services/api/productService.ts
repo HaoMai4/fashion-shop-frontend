@@ -698,6 +698,22 @@ export const productService = {
     return (res.products || []).map(mapBackendProductToSanPham);
   },
 
+  async getForYou(limit = 10): Promise<SanPham[]> {
+    try {
+      const res = await apiRequest<{ products?: BackendProduct[] }>(
+        `/api/products/for-you?limit=${limit}`,
+        {
+          auth: true,
+        }
+      );
+
+      return (res.products || []).map(mapBackendProductToSanPham);
+    } catch (error) {
+      console.warn("getForYou error:", error);
+      return [];
+    }
+  },
+
   async getSaleItems(limit = 10): Promise<SanPham[]> {
     const saleItems = await productService.getAll({ khuyenMai: true });
 

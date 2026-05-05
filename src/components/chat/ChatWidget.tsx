@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { ChatMessage } from "@/types";
 import {
   chatbotService,
+  type ChatbotFilters,
+  type ChatbotConversationMessage,
   type RecommendedChatProduct,
 } from "@/services/api/chatbotService";
 import { formatPrice } from "@/utils/format";
@@ -15,13 +17,16 @@ const quickPrompts = ["Áo polo nam dưới 400k", "Tư vấn size"];
 
 type MatewearAiPromptDetail = {
   prompt: string;
+  displayText?: string;
 };
 
 function getProductImage(product?: RecommendedChatProduct) {
   if (!product) return "/placeholder.svg";
+
   if (Array.isArray(product.hinhAnh) && product.hinhAnh.length > 0) {
     return product.hinhAnh[0];
   }
+
   return "/placeholder.svg";
 }
 
@@ -44,8 +49,10 @@ export default function ChatWidget() {
       type: "text",
     },
   ]);
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [contextFilters, setContextFilters] = useState<ChatbotFilters>(null);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +60,7 @@ export default function ChatWidget() {
     if (localStorage.getItem(DISMISSED_KEY)) return;
 
     const timer = setTimeout(() => setShowTeaser(true), 1500);
+
     const autoHide = setTimeout(() => {
       setShowTeaser(false);
       localStorage.setItem(DISMISSED_KEY, "1");
@@ -79,17 +87,44 @@ export default function ChatWidget() {
     localStorage.setItem(DISMISSED_KEY, "1");
   };
 
+  const buildConversationPayload = (
+    currentMessages: ChatMessage[],
+    nextMessage: ChatMessage,
+    backendText?: string
+  ): ChatbotConversationMessage[] => {
+    const nextMessageId = nextMessage.id;
+
+    return [...currentMessages, nextMessage]
+      .filter((message) => message.role === "user" || message.role === "bot")
+      .slice(-8)
+      .map((message) => ({
+        role: message.role === "bot" ? "assistant" : "user",
+        content:
+          message.id === nextMessageId && backendText
+            ? backendText
+            : message.content,
+      }));
+  };
+
   const sendMessage = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed || loading) return;
+    async (text: string, options?: { displayText?: string }) => {
+      const backendText = text.trim();
+      const displayText = options?.displayText?.trim() || backendText;
+
+      if (!backendText || loading) return;
 
       const userMsg: ChatMessage = {
         id: Date.now().toString(),
         role: "user",
-        content: trimmed,
+        content: displayText,
         timestamp: new Date().toISOString(),
       };
+
+      const conversationPayload = buildConversationPayload(
+        messages,
+        userMsg,
+        backendText
+      );
 
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
@@ -97,9 +132,12 @@ export default function ChatWidget() {
 
       try {
         const response = await chatbotService.sendMessage({
-          messages: [{ role: "user", content: trimmed }],
+          messages: conversationPayload,
+          contextFilters,
           limit: 4,
         });
+
+        setContextFilters(response.filters || null);
 
         const botMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -127,7 +165,7 @@ export default function ChatWidget() {
         setLoading(false);
       }
     },
-    [loading]
+    [loading, messages, contextFilters]
   );
 
   useEffect(() => {
@@ -137,11 +175,15 @@ export default function ChatWidget() {
 
       if (!prompt) return;
 
+      const displayText =
+        customEvent.detail?.displayText?.trim() ||
+        (prompt.length > 120 ? "Gợi ý phối đồ / sản phẩm tương tự" : prompt);
+
       dismissTeaser();
       setOpen(true);
 
       setTimeout(() => {
-        sendMessage(prompt);
+        sendMessage(prompt, { displayText });
       }, 150);
     };
 
@@ -164,18 +206,23 @@ export default function ChatWidget() {
         {showTeaser && (
           <div className="relative max-w-[180px] animate-fade-in rounded-lg border border-border bg-card px-3 py-2 text-foreground shadow-lg">
             <button
+              type="button"
               onClick={dismissTeaser}
               className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-muted transition-colors hover:bg-muted-foreground/20"
+              aria-label="Đóng gợi ý AI"
             >
               <X className="h-2.5 w-2.5 text-muted-foreground" />
             </button>
+
             <p className="mb-1.5 text-[10px] text-muted-foreground">
               Hỏi AI về thời trang ✨
             </p>
+
             <div className="flex flex-wrap gap-1">
               {quickPrompts.map((prompt) => (
                 <button
                   key={prompt}
+                  type="button"
                   onClick={() => {
                     dismissTeaser();
                     setOpen(true);
@@ -191,6 +238,7 @@ export default function ChatWidget() {
         )}
 
         <button
+          type="button"
           onClick={() => {
             dismissTeaser();
             setOpen(true);
@@ -199,6 +247,7 @@ export default function ChatWidget() {
           aria-label="Mở chatbot AI"
         >
           <Bot className="h-4.5 w-4.5" />
+
           <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />
@@ -218,10 +267,12 @@ export default function ChatWidget() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
             <Bot className="h-4 w-4" />
           </div>
+
           <div>
             <p className="mb-0.5 text-[13px] font-bold leading-none text-primary-foreground">
               MATEWEAR AI
             </p>
+
             <div className="flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-success" />
               <p className="text-[10px] text-primary-foreground/55">
@@ -238,7 +289,7 @@ export default function ChatWidget() {
             asChild
             className="h-7 w-7 text-primary-foreground/50 hover:bg-primary-foreground/10 hover:text-primary-foreground"
           >
-            <Link to="/ai-tu-van">
+            <Link to="/ai-tu-van" aria-label="Mở trang AI tư vấn">
               <MessageCircle className="h-3.5 w-3.5" />
             </Link>
           </Button>
@@ -248,6 +299,7 @@ export default function ChatWidget() {
             size="icon"
             onClick={() => setOpen(false)}
             className="h-7 w-7 text-primary-foreground/50 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            aria-label="Đóng chatbot AI"
           >
             <X className="h-3.5 w-3.5" />
           </Button>
@@ -261,7 +313,9 @@ export default function ChatWidget() {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex ${
+              msg.role === "user" ? "justify-end" : "justify-start"
+            }`}
           >
             {msg.role === "bot" && (
               <div className="mr-1.5 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-accent/10">
@@ -293,14 +347,20 @@ export default function ChatWidget() {
                           src={getProductImage(product)}
                           alt={product.ten}
                           className="h-12 w-12 rounded bg-secondary object-cover"
+                          onError={(event) => {
+                            event.currentTarget.src = "/placeholder.svg";
+                          }}
                         />
+
                         <div className="min-w-0 flex-1">
                           <p className="line-clamp-1 text-[11px] font-semibold text-foreground">
                             {product.ten}
                           </p>
+
                           <p className="mt-0.5 text-[11px] font-bold text-accent">
                             {formatPrice(product.gia)}
                           </p>
+
                           {product.giaGoc ? (
                             <p className="text-[10px] text-muted-foreground line-through">
                               {formatPrice(product.giaGoc)}
@@ -318,6 +378,7 @@ export default function ChatWidget() {
                   {msg.suggestions.map((suggestion) => (
                     <button
                       key={suggestion}
+                      type="button"
                       onClick={() => sendMessage(suggestion)}
                       className="rounded-full border border-accent/20 bg-accent/5 px-2 py-0.5 text-[10px] font-semibold text-accent transition-colors hover:bg-accent/15"
                     >
@@ -335,8 +396,10 @@ export default function ChatWidget() {
             <div className="mr-1.5 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-accent/10">
               <Bot className="h-2.5 w-2.5 text-accent" />
             </div>
+
             <div className="flex items-center gap-1.5 rounded-xl rounded-bl-sm border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
               <Sparkles className="h-3 w-3 animate-pulse text-accent" />
+
               <span className="flex gap-0.5">
                 <span
                   className="h-1 w-1 animate-bounce rounded-full bg-accent/40"
@@ -357,19 +420,20 @@ export default function ChatWidget() {
       </div>
 
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
+        onSubmit={(event) => {
+          event.preventDefault();
           sendMessage(input);
         }}
         className="flex gap-1.5 border-t border-border bg-background p-2"
       >
         <Input
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(event) => setInput(event.target.value)}
           placeholder="Hỏi AI về thời trang..."
           className="h-8 flex-1 rounded-lg border-border/50 text-[12px] focus-visible:ring-accent"
           disabled={loading}
         />
+
         <Button
           type="submit"
           size="icon"
