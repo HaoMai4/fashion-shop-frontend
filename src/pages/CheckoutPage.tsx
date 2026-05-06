@@ -31,6 +31,8 @@ import type { ChiTietGioHang } from '@/types';
 
 const BUY_NOW_STORAGE_KEY = 'matewear_buy_now';
 
+type PaymentType = 'COD' | 'PayOS';
+
 type CheckoutForm = {
   hoTen: string;
   sdt: string;
@@ -151,6 +153,7 @@ export default function CheckoutPage() {
 
   const [step, setStep] = useState<'form' | 'success'>('form');
   const [shipping, setShipping] = useState<'standard' | 'express'>('standard');
+  const [paymentType, setPaymentType] = useState<PaymentType>('COD');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderCode, setOrderCode] = useState('');
 
@@ -511,9 +514,21 @@ export default function CheckoutPage() {
           addressLine1: shippingAddressText,
         },
         paymentMethod: {
-          type: 'COD',
-          note: 'Thanh toán khi nhận hàng',
+          type: paymentType,
+          note:
+            paymentType === 'COD'
+              ? 'Thanh toán khi nhận hàng'
+              : 'Thanh toán online qua PayOS',
         },
+        returnUrl:
+          paymentType === 'PayOS'
+            ? `${window.location.origin}/payment/success`
+            : undefined,
+        cancelUrl:
+          paymentType === 'PayOS'
+            ? `${window.location.origin}/payment/cancel`
+            : undefined,
+        finalize: paymentType === 'PayOS',
         guestInfo: {
           fullName: shippingFullName,
           email: shippingEmail,
@@ -529,6 +544,29 @@ export default function CheckoutPage() {
 
       if (!createdOrder) {
         throw new Error('Backend không trả về thông tin đơn hàng');
+      }
+
+      if (paymentType === 'PayOS') {
+        const checkoutUrl = response?.payment?.checkoutUrl;
+        const payosOrderCode = createdOrder.orderCode || createdOrder._id || '';
+
+        if (!checkoutUrl) {
+          throw new Error('Backend không trả về link thanh toán PayOS');
+        }
+
+        if (payosOrderCode) {
+          localStorage.setItem('matewear_pending_payos_order', payosOrderCode);
+        }
+
+        if (mode === 'cart') {
+          clearCart();
+        }
+
+        localStorage.removeItem(BUY_NOW_STORAGE_KEY);
+
+        toast.success('Đã tạo đơn hàng, đang chuyển đến PayOS...');
+        window.location.href = checkoutUrl;
+        return;
       }
 
       if (mode === 'cart') {
@@ -868,17 +906,35 @@ export default function CheckoutPage() {
             <div className="space-y-3 rounded-xl border border-border p-5">
               <h2 className="font-semibold">Phương thức thanh toán</h2>
 
-              <RadioGroup value="cod" className="space-y-2">
-                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 hover:bg-secondary/50">
-                  <RadioGroupItem value="cod" />
-                  <div>
-                    <p className="text-sm font-medium">
-                      Thanh toán khi nhận hàng (COD)
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Ưu tiên cho flow demo đồ án
-                    </p>
+              <RadioGroup
+                value={paymentType}
+                onValueChange={(value) => setPaymentType(value as PaymentType)}
+                className="space-y-2"
+              >
+                <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-3 hover:bg-secondary/50">
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="COD" />
+                    <div>
+                      <p className="text-sm font-medium">Thanh toán khi nhận hàng</p>
+                      <p className="text-xs text-muted-foreground">
+                        Thanh toán bằng tiền mặt khi nhận sản phẩm.
+                      </p>
+                    </div>
                   </div>
+                  <span className="text-sm font-medium">COD</span>
+                </label>
+
+                <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-3 hover:bg-secondary/50">
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="PayOS" />
+                    <div>
+                      <p className="text-sm font-medium">Thanh toán online qua PayOS</p>
+                      <p className="text-xs text-muted-foreground">
+                        Chuyển khoản/QR qua cổng thanh toán PayOS.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-medium">PayOS</span>
                 </label>
               </RadioGroup>
             </div>
@@ -945,7 +1001,13 @@ export default function CheckoutPage() {
                 className="w-full"
                 disabled={isSubmitting || addressLoading}
               >
-                {isSubmitting ? 'Đang đặt hàng...' : 'Đặt hàng'}
+                {isSubmitting
+                  ? paymentType === 'PayOS'
+                    ? 'Đang tạo link thanh toán...'
+                    : 'Đang đặt hàng...'
+                  : paymentType === 'PayOS'
+                    ? 'Thanh toán qua PayOS'
+                    : 'Đặt hàng'}
               </Button>
             </div>
           </div>
@@ -979,11 +1041,10 @@ export default function CheckoutPage() {
                       setSelectedAddressId(addressId);
                       setAddressModalOpen(false);
                     }}
-                    className={`w-full rounded-xl border p-4 text-left transition ${
-                      selected
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-secondary/50'
-                    }`}
+                    className={`w-full rounded-xl border p-4 text-left transition ${selected
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:bg-secondary/50'
+                      }`}
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold">{address.receiverName}</p>
@@ -1058,13 +1119,12 @@ export default function CheckoutPage() {
                         setVoucherModalOpen(false);
                       }
                     }}
-                    className={`w-full rounded-xl border p-4 text-left transition ${
-                      selected
-                        ? 'border-blue-500 bg-blue-50'
-                        : usable
-                          ? 'border-border hover:border-blue-300 hover:bg-blue-50/40'
-                          : 'border-dashed border-slate-300 bg-slate-50 opacity-80'
-                    }`}
+                    className={`w-full rounded-xl border p-4 text-left transition ${selected
+                      ? 'border-blue-500 bg-blue-50'
+                      : usable
+                        ? 'border-border hover:border-blue-300 hover:bg-blue-50/40'
+                        : 'border-dashed border-slate-300 bg-slate-50 opacity-80'
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>

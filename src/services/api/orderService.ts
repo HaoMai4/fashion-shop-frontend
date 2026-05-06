@@ -31,6 +31,21 @@ export type CreateOrderPayload = {
   customerNote?: string;
   voucherCode?: string;
   shippingFee?: number;
+
+  // PayOS
+  returnUrl?: string;
+  cancelUrl?: string;
+  finalize?: boolean;
+};
+
+export type PaymentStatusResponse = {
+  orderCode: string;
+  orderStatus: string;
+  paymentStatus: "pending" | "paid" | "failed" | "cancelled";
+  totalAmount: number;
+  createdAt?: string;
+  paidAt?: string | null;
+  cancelledAt?: string | null;
 };
 
 export const orderService = {
@@ -40,6 +55,12 @@ export const orderService = {
       body: JSON.stringify(payload),
       auth: true,
     });
+  },
+
+  async checkPaymentStatus(orderCode: string): Promise<PaymentStatusResponse> {
+    return apiRequest(
+      `/api/orders/payment-status/${encodeURIComponent(orderCode)}`
+    );
   },
 
   async getMyOrders(params?: {
