@@ -183,6 +183,17 @@ export async function login(data: LoginPayload): Promise<AuthResponse> {
   return normalized;
 }
 
+export async function socialLogin(idToken: string): Promise<AuthResponse> {
+  const raw = await apiRequest<any>(buildPath('/social-login'), {
+    method: 'POST',
+    body: JSON.stringify({ idToken }),
+  });
+
+  const normalized = normalizeAuthResponse(raw);
+  saveAuth(normalized);
+  return normalized;
+}
+
 export async function register(data: RegisterPayload): Promise<AuthResponse> {
   const { firstName, lastName } = splitFullName(data.hoTen);
 

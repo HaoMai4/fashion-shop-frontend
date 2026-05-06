@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
+import { signInWithPopup } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import MainLayout from '@/components/layout/MainLayout';
 import { toast } from 'sonner';
-import { login } from '@/services/api/userService';
+import { login, socialLogin } from '@/services/api/userService';
+import { auth, googleProvider } from '@/lib/firebase';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ export default function LoginPage() {
     password: '',
   });
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -40,10 +43,37 @@ export default function LoginPage() {
       const message =
         error?.response?.data?.message ||
         error?.response?.data?.error ||
+        error?.message ||
         'Đăng nhập thất bại';
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setGoogleLoading(true);
+
+      const result = await signInWithPopup(auth, googleProvider);
+      const idToken = await result.user.getIdToken();
+
+      await socialLogin(idToken);
+
+      toast.success('Đăng nhập Google thành công');
+      navigate('/tai-khoan');
+    } catch (error: any) {
+      console.error('Google login error:', error);
+
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Đăng nhập Google thất bại';
+
+      toast.error(message);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -91,10 +121,26 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || googleLoading}>
               {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
             </Button>
           </form>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">hoặc</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={handleGoogleLogin}
+            disabled={loading || googleLoading}
+          >
+            {googleLoading ? 'Đang đăng nhập Google...' : 'Đăng nhập bằng Google'}
+          </Button>
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Chưa có tài khoản?{' '}
