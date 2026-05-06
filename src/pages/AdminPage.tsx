@@ -5,6 +5,7 @@ import {
   BarChart3,
   FileText,
   TicketPercent,
+  FolderTree,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,13 @@ const adminModules = [
     description: 'Quản lý sản phẩm gốc, biến thể, size, giá, tồn kho và xóa variant.',
     href: '/admin/products',
     icon: Package,
+    enabled: true,
+  },
+  {
+    title: 'Quản lý danh mục',
+    description: 'Thêm, chỉnh sửa và xóa danh mục sản phẩm đang dùng trên website.',
+    href: '/admin/categories',
+    icon: FolderTree,
     enabled: true,
   },
   {
@@ -59,7 +67,7 @@ export default function AdminPage() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {adminModules.map((module) => {
             const Icon = module.icon;
 
