@@ -61,7 +61,9 @@ export default function RegisterPage() {
       const message =
         error?.response?.data?.message ||
         error?.response?.data?.error ||
+        error?.message ||
         'Đăng ký thất bại';
+
       toast.error(message);
     } finally {
       setLoading(false);

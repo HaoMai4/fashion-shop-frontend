@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { signInWithPopup } from 'firebase/auth';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +24,11 @@ export default function LoginPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,7 +41,12 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await login(formData);
+
+      await login({
+        email: formData.email.trim(),
+        password: formData.password,
+      });
+
       toast.success('Đăng nhập thành công');
       navigate('/tai-khoan');
     } catch (error: any) {
@@ -45,6 +55,7 @@ export default function LoginPage() {
         error?.response?.data?.error ||
         error?.message ||
         'Đăng nhập thất bại';
+
       toast.error(message);
     } finally {
       setLoading(false);
@@ -96,6 +107,7 @@ export default function LoginPage() {
                 placeholder="Nhập email"
                 value={formData.email}
                 onChange={handleChange}
+                autoComplete="email"
               />
             </div>
 
@@ -110,14 +122,24 @@ export default function LoginPage() {
                   value={formData.password}
                   onChange={handleChange}
                   className="pr-10"
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(prev => !prev)}
+                  onClick={() => setShowPassword((prev) => !prev)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
+              </div>
+
+              <div className="text-right">
+                <Link
+                  to="/quen-mat-khau"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Quên mật khẩu?
+                </Link>
               </div>
             </div>
 

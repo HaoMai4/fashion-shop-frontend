@@ -11,7 +11,9 @@ import {
   ShoppingBag,
   Save,
   Loader2,
+  KeyRound,
 } from 'lucide-react';
+
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,6 +63,7 @@ function getGenderLabel(gender?: string) {
   if (normalized === 'nam' || normalized === 'male') return 'Nam';
   if (normalized === 'nu' || normalized === 'female') return 'Nữ';
   if (normalized === 'khac' || normalized === 'other') return 'Khác';
+
   return 'Chưa cập nhật';
 }
 
@@ -127,6 +130,7 @@ export default function AccountPage() {
 
       try {
         const profile = await getMe();
+
         setUser(profile);
         setForm(buildFormFromUser(profile));
 
@@ -134,6 +138,7 @@ export default function AccountPage() {
           const addressList = await getAddresses();
           const mainAddress =
             addressList.find((item) => item.isDefault) || addressList[0] || null;
+
           setDefaultAddress(mainAddress);
         } catch (addressError) {
           console.error('Load default address error:', addressError);
@@ -246,6 +251,14 @@ export default function AccountPage() {
           navigate('/vi-voucher');
         },
       },
+      {
+        key: 'change-password',
+        label: 'Đổi mật khẩu',
+        icon: <KeyRound className="h-5 w-5 text-slate-500" />,
+        action: () => {
+          navigate('/doi-mat-khau');
+        },
+      },
     ];
 
     if (isAdmin) {
@@ -288,6 +301,7 @@ export default function AccountPage() {
           <div className="mx-auto max-w-xl rounded-2xl border bg-white p-6 shadow-sm">
             <h1 className="mb-2 text-2xl font-bold">Tài khoản</h1>
             <p className="mb-4 text-muted-foreground">Bạn chưa đăng nhập.</p>
+
             <Button onClick={() => navigate('/dang-nhap')}>
               Đi đến đăng nhập
             </Button>
@@ -303,8 +317,16 @@ export default function AccountPage() {
         <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-100 text-2xl font-bold text-blue-600">
-                {fullName.charAt(0).toUpperCase()}
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-2xl font-bold text-blue-600">
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={fullName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  fullName.charAt(0).toUpperCase()
+                )}
               </div>
 
               <div>
@@ -428,7 +450,7 @@ export default function AccountPage() {
                   className="bg-slate-50"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Email dùng để đăng nhập nên không chỉnh sửa tại đây.
+                  Email dùng để đăng nhập và nhận thông báo đơn hàng.
                 </p>
               </div>
 

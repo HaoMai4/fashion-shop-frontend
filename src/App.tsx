@@ -13,6 +13,9 @@ import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 import AccountPage from "./pages/AccountPage";
 import WishlistPage from "./pages/WishlistPage";
 import OrderHistory from "./pages/OrderHistory";
@@ -58,6 +61,10 @@ const App = () => (
 
           <Route path="/dang-nhap" element={<LoginPage />} />
           <Route path="/dang-ky" element={<RegisterPage />} />
+          <Route path="/quen-mat-khau" element={<ForgotPasswordPage />} />
+          <Route path="/dat-lai-mat-khau" element={<ResetPasswordPage />} />
+          <Route path="/doi-mat-khau" element={<ChangePasswordPage />} />
+
           <Route path="/tai-khoan" element={<AccountPage />} />
           <Route path="/dia-chi" element={<AddressPage />} />
           <Route path="/vi-voucher" element={<VoucherWalletPage />} />

@@ -23,6 +23,14 @@ export interface UserProfile {
   dateOfBirth?: string | null;
   createdAt?: string;
   updatedAt?: string;
+
+  hasPassword?: boolean;
+  providers?: string[];
+  socialLogins?: Array<{
+    provider: string;
+    providerId?: string;
+    linkedAt?: string;
+  }>;
 }
 
 export interface LoginPayload {
@@ -48,8 +56,27 @@ export interface WishlistResponse {
   data?: any[];
 }
 
+export type ForgotPasswordResponse = {
+  message?: string;
+};
+
+export type ResetPasswordPayload = {
+  email: string;
+  otp: string;
+  newPassword: string;
+};
+
+export type ChangePasswordPayload = {
+  currentPassword: string;
+  newPassword: string;
+};
+
 function buildPath(path: string) {
   return `${USER_API_PREFIX}${path}`;
+}
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
 }
 
 function getAuthHeaders() {
@@ -64,8 +91,16 @@ function normalizeUser(raw: any): UserProfile {
   if (!raw) {
     return {
       email: '',
+      providers: [],
+      socialLogins: [],
     };
   }
+
+  const socialLogins = Array.isArray(raw.socialLogins) ? raw.socialLogins : [];
+  const providers =
+    raw.providers ||
+    socialLogins.map((item: any) => item?.provider).filter(Boolean) ||
+    [];
 
   return {
     _id: raw._id || raw.id,
@@ -87,6 +122,9 @@ function normalizeUser(raw: any): UserProfile {
     dateOfBirth: raw.dateOfBirth,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
+    hasPassword: raw.hasPassword,
+    providers,
+    socialLogins,
   };
 }
 
@@ -149,10 +187,6 @@ export function clearAuth() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
-}
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
 }
 
 export function getStoredUser(): UserProfile | null {
@@ -237,6 +271,32 @@ export async function updateMe(payload: Partial<UserProfile>): Promise<UserProfi
   const user = normalizeUser(raw?.user || raw?.data || raw);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   return user;
+}
+
+export async function forgotPassword(email: string): Promise<ForgotPasswordResponse> {
+  return apiRequest<any>(buildPath('/forgot-password'), {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(
+  payload: ResetPasswordPayload
+): Promise<{ message?: string }> {
+  return apiRequest<any>(buildPath('/reset-password'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function changePassword(
+  payload: ChangePasswordPayload
+): Promise<{ message?: string }> {
+  return apiRequest<any>(buildPath('/change-password'), {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
 }
 
 // =========================
