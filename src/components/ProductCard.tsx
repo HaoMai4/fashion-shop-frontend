@@ -30,13 +30,20 @@ export default function ProductCard({
       ? product.hinhAnh
       : '/placeholder.svg';
 
+  const isOutOfStock = Number(product.soLuongTon || 0) <= 0;
+
   return (
     <div className="group relative rounded-lg bg-card border border-border overflow-hidden transition-all duration-300 hover:shadow-md hover:border-accent/20">
-      <Link to={`/san-pham/${product.slug}`} className="block relative aspect-[3/4] overflow-hidden bg-secondary">
+      <Link
+        to={`/san-pham/${product.slug}`}
+        className="block relative aspect-[3/4] overflow-hidden bg-secondary"
+      >
         <img
           src={imageSrc}
           alt={product.ten}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ${
+            isOutOfStock ? 'opacity-70 grayscale-[20%]' : ''
+          }`}
           loading="lazy"
           onError={(e) => {
             e.currentTarget.src = '/placeholder.svg';
@@ -47,18 +54,37 @@ export default function ProductCard({
           <button
             onClick={(e) => {
               e.preventDefault();
+
+              if (isOutOfStock) {
+                return;
+              }
+
               onAddToCart?.(product);
             }}
-            className="w-full flex items-center justify-center gap-1 rounded-md bg-primary text-primary-foreground py-2 text-[11px] font-semibold hover:bg-primary/90 transition-colors shadow-sm"
+            disabled={isOutOfStock}
+            className={`w-full flex items-center justify-center gap-1 rounded-md py-2 text-[11px] font-semibold transition-colors shadow-sm ${
+              isOutOfStock
+                ? 'cursor-not-allowed bg-muted text-muted-foreground'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            }`}
           >
-            <ShoppingBag className="h-3 w-3" /> Thêm vào giỏ
+            <ShoppingBag className="h-3 w-3" />
+            {isOutOfStock ? 'Hết hàng' : 'Thêm vào giỏ'}
           </button>
         </div>
       </Link>
 
       <div className="absolute top-1.5 left-1.5 flex flex-col gap-0.5">
+        {isOutOfStock && (
+          <span className="inline-flex items-center rounded px-1.5 py-px text-[9px] font-bold leading-none bg-muted text-muted-foreground">
+            Hết hàng
+          </span>
+        )}
+
         {product.badge && badgeConfig[product.badge] && (
-          <span className={`inline-flex items-center rounded px-1.5 py-px text-[9px] font-bold leading-none ${badgeConfig[product.badge].className}`}>
+          <span
+            className={`inline-flex items-center rounded px-1.5 py-px text-[9px] font-bold leading-none ${badgeConfig[product.badge].className}`}
+          >
             {badgeConfig[product.badge].label}
           </span>
         )}
@@ -101,7 +127,10 @@ export default function ProductCard({
         </Link>
 
         <div className="flex items-baseline gap-1.5 mb-1.5">
-          <span className="text-sm font-extrabold text-foreground">{formatPrice(product.gia)}</span>
+          <span className="text-sm font-extrabold text-foreground">
+            {formatPrice(product.gia)}
+          </span>
+
           {typeof product.giaGoc === 'number' && product.giaGoc > product.gia && (
             <span className="text-[10px] text-muted-foreground/60 line-through">
               {formatPrice(product.giaGoc)}
@@ -118,6 +147,7 @@ export default function ProductCard({
               title={m.ten}
             />
           ))}
+
           {(product.mauSac?.length || 0) > 4 && (
             <span className="text-[9px] text-muted-foreground ml-0.5">
               +{product.mauSac.length - 4}
@@ -134,6 +164,7 @@ export default function ProductCard({
               {s}
             </span>
           ))}
+
           {(product.kichCo?.length || 0) > 4 && (
             <span className="text-[9px] px-0.5 text-muted-foreground">
               +{product.kichCo.length - 4}

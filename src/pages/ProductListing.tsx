@@ -97,40 +97,60 @@ function getSortLabel(sort?: ProductFilter['sapXep']) {
 }
 
 function getDefaultCartInfo(product: any) {
+  const firstAvailableVariant =
+    product?.bienThe?.find((variant: any) =>
+      variant?.kichThuoc?.some((size: any) => Number(size.stock || 0) > 0)
+    ) ||
+    product?.bienThe?.[0] ||
+    product?.variants?.find((variant: any) =>
+      variant?.sizes?.some((size: any) => Number(size.stock || 0) > 0)
+    ) ||
+    product?.variants?.[0] ||
+    null;
+
+  const firstAvailableSize =
+    firstAvailableVariant?.kichThuoc?.find(
+      (size: any) => Number(size.stock || 0) > 0
+    ) ||
+    firstAvailableVariant?.sizes?.find(
+      (size: any) => Number(size.stock || 0) > 0
+    ) ||
+    null;
+
   const variantId =
+    firstAvailableVariant?.id ||
+    firstAvailableVariant?._id ||
     product?.defaultVariantId ||
     product?.variantId ||
-    product?.bienThe?.[0]?.id ||
-    product?.variants?.[0]?._id ||
-    product?.variants?.[0]?.id ||
     '';
 
   const color =
+    firstAvailableVariant?.mau ||
+    firstAvailableVariant?.color ||
     product?.defaultColor ||
     product?.mauSac?.[0]?.ten ||
-    product?.bienThe?.[0]?.mau ||
-    product?.variants?.[0]?.color ||
     '';
 
   const size =
+    firstAvailableSize?.size ||
     product?.defaultSize ||
-    product?.kichCo?.[0] ||
-    product?.bienThe?.[0]?.kichThuoc?.[0]?.size ||
-    product?.variants?.[0]?.sizes?.[0]?.size ||
     '';
 
   const price =
+    Number(firstAvailableSize?.finalPrice || 0) ||
+    Number(firstAvailableSize?.discountPrice || 0) ||
+    Number(firstAvailableSize?.price || 0) ||
     Number(product?.defaultPrice || 0) ||
-    Number(product?.bienThe?.[0]?.kichThuoc?.[0]?.finalPrice || 0) ||
-    Number(product?.variants?.[0]?.sizes?.[0]?.discountPrice || 0) ||
-    Number(product?.variants?.[0]?.sizes?.[0]?.price || 0) ||
     Number(product?.gia || 0);
+
+  const stock = Number(firstAvailableSize?.stock || 0);
 
   return {
     variantId: String(variantId),
     color: String(color),
     size: String(size),
     price,
+    stock,
     image: product?.hinhAnh || '/placeholder.svg',
   };
 }
@@ -369,7 +389,12 @@ export default function ProductListing() {
       return;
     }
 
-    addItem(product, cartInfo.color, cartInfo.size, 1, {
+    if (Number(product.soLuongTon || 0) <= 0 || Number(cartInfo.stock || 0) <= 0) {
+      toast.error('Sản phẩm hiện đã hết hàng');
+      return;
+    }
+
+    addItem(product, cartInfo.size, cartInfo.color, 1, {
       variantId: cartInfo.variantId,
       price: cartInfo.price,
       image: cartInfo.image,
