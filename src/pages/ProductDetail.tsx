@@ -781,6 +781,7 @@ export default function ProductDetail() {
                     variantId: String(selectedVariant.id),
                     image: displayImage,
                     price: displayPrice,
+                    stock: displayStock,
                   });
                 }}
                 disabled={!canAddToCart}

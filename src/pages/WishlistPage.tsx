@@ -20,47 +20,86 @@ function getImageSrc(image: any) {
   return '/placeholder.svg';
 }
 
-function getDefaultCartInfo(product: any, imageSrc: string) {
-  const variants = Array.isArray(product?.variants)
-    ? product.variants
-    : Array.isArray(product?.bienThe)
-      ? product.bienThe
-      : [];
+function getVariantSizes(variant: any) {
+  if (Array.isArray(variant?.kichThuoc)) {
+    return variant.kichThuoc;
+  }
 
-  const firstVariant = variants[0];
-  const firstSize = Array.isArray(firstVariant?.sizes) ? firstVariant.sizes[0] : null;
+  if (Array.isArray(variant?.sizes)) {
+    return variant.sizes;
+  }
+
+  return [];
+}
+
+function getVariantId(variant: any) {
+  return variant?.id || variant?._id || '';
+}
+
+function getVariantColor(variant: any) {
+  return variant?.mau || variant?.color || '';
+}
+
+function getDefaultCartInfo(product: any, imageSrc: string) {
+  const detailVariants = Array.isArray(product?.bienThe) ? product.bienThe : [];
+  const rawVariants = Array.isArray(product?.variants) ? product.variants : [];
+  const variants = detailVariants.length > 0 ? detailVariants : rawVariants;
+
+  const firstAvailableVariant =
+    variants.find((variant: any) =>
+      getVariantSizes(variant).some((size: any) => Number(size.stock || 0) > 0)
+    ) ||
+    variants[0] ||
+    null;
+
+  const firstAvailableSize =
+    getVariantSizes(firstAvailableVariant).find(
+      (size: any) => Number(size.stock || 0) > 0
+    ) ||
+    getVariantSizes(firstAvailableVariant)[0] ||
+    null;
 
   const variantId =
+    getVariantId(firstAvailableVariant) ||
     product?.defaultVariantId ||
     product?.variantId ||
-    firstVariant?._id ||
-    firstVariant?.id ||
     '';
 
   const color =
+    getVariantColor(firstAvailableVariant) ||
     product?.defaultColor ||
     product?.mauSac?.[0]?.ten ||
-    firstVariant?.color ||
     '';
 
   const size =
+    firstAvailableSize?.size ||
     product?.defaultSize ||
     product?.kichCo?.[0] ||
-    firstSize?.size ||
     '';
 
   const price =
+    Number(firstAvailableSize?.finalPrice || 0) ||
+    Number(firstAvailableSize?.discountPrice || 0) ||
+    Number(firstAvailableSize?.price || 0) ||
     Number(product?.defaultPrice || 0) ||
-    Number(firstSize?.discountPrice || 0) ||
-    Number(firstSize?.price || 0) ||
     Number(product?.gia || 0);
+
+  const stock = Number(firstAvailableSize?.stock || product?.soLuongTon || 0);
+
+  const image =
+    imageSrc ||
+    firstAvailableVariant?.hinhAnh?.[0] ||
+    firstAvailableVariant?.images?.[0] ||
+    product?.hinhAnh ||
+    '/placeholder.svg';
 
   return {
     variantId: String(variantId),
     color: String(color),
     size: String(size),
     price,
-    image: imageSrc,
+    stock,
+    image,
   };
 }
 
@@ -108,6 +147,9 @@ export default function WishlistPage() {
           {items.map((p) => {
             const imageSrc = getImageSrc(p.hinhAnh);
             const cartInfo = getDefaultCartInfo(p, imageSrc);
+            const totalStock = Number(p.soLuongTon || 0);
+            const optionStock = Number(cartInfo.stock || 0);
+            const isOutOfStock = optionStock <= 0 && totalStock <= 0;
 
             return (
               <div
@@ -116,17 +158,24 @@ export default function WishlistPage() {
               >
                 <Link
                   to={`/san-pham/${p.slug}`}
-                  className="block aspect-[3/4] bg-secondary overflow-hidden"
+                  className="relative block aspect-[3/4] bg-secondary overflow-hidden"
                 >
                   <img
                     src={imageSrc}
                     alt={p.ten}
-                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className={`h-full w-full object-cover group-hover:scale-105 transition-transform duration-500 ${isOutOfStock ? 'opacity-70 grayscale-[20%]' : ''
+                      }`}
                     loading="lazy"
                     onError={(e) => {
                       e.currentTarget.src = '/placeholder.svg';
                     }}
                   />
+
+                  {isOutOfStock ? (
+                    <span className="absolute left-2 top-2 rounded bg-muted px-2 py-1 text-[10px] font-bold text-muted-foreground">
+                      Hết hàng
+                    </span>
+                  ) : null}
                 </Link>
 
                 <div className="p-3 space-y-2">
@@ -153,7 +202,13 @@ export default function WishlistPage() {
                     <Button
                       size="sm"
                       className="flex-1 gap-1 text-xs"
+                      disabled={isOutOfStock}
                       onClick={async () => {
+                        if (isOutOfStock) {
+                          toast.error('Sản phẩm hiện đã hết hàng');
+                          return;
+                        }
+
                         if (!cartInfo.variantId) {
                           toast.error('Sản phẩm này chưa có biến thể để thêm vào giỏ hàng');
                           return;
@@ -164,17 +219,18 @@ export default function WishlistPage() {
                           return;
                         }
 
-                        addItem(p, cartInfo.color, cartInfo.size, 1, {
+                        addItem(p, cartInfo.size, cartInfo.color, 1, {
                           variantId: cartInfo.variantId,
                           price: cartInfo.price,
                           image: cartInfo.image,
+                          stock: cartInfo.stock,
                         });
 
                         await removeItem(String(p.id));
                       }}
                     >
                       <ShoppingBag className="h-3 w-3" />
-                      Thêm giỏ hàng
+                      {isOutOfStock ? 'Hết hàng' : 'Thêm giỏ hàng'}
                     </Button>
 
                     <Button

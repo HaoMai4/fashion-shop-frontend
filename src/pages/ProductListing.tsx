@@ -398,6 +398,7 @@ export default function ProductListing() {
       variantId: cartInfo.variantId,
       price: cartInfo.price,
       image: cartInfo.image,
+      stock: cartInfo.stock,
     });
   };
 
@@ -475,42 +476,42 @@ export default function ProductListing() {
               filter.kichCo?.length ||
               filter.giaMin !== undefined ||
               filter.giaMax !== undefined) && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {filter.danhMuc && (
-                  <Badge
-                    filter={filter.danhMuc}
-                    onRemove={() => setFilter({ ...filter, danhMuc: undefined })}
-                  />
-                )}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {filter.danhMuc && (
+                    <Badge
+                      filter={filter.danhMuc}
+                      onRemove={() => setFilter({ ...filter, danhMuc: undefined })}
+                    />
+                  )}
 
-                {filter.gioiTinh && (
-                  <Badge
-                    filter={
-                      filter.gioiTinh === 'nam'
-                        ? 'Nam'
-                        : filter.gioiTinh === 'nu'
-                          ? 'Nữ'
-                          : 'Unisex'
-                    }
-                    onRemove={() => setFilter({ ...filter, gioiTinh: undefined })}
-                  />
-                )}
+                  {filter.gioiTinh && (
+                    <Badge
+                      filter={
+                        filter.gioiTinh === 'nam'
+                          ? 'Nam'
+                          : filter.gioiTinh === 'nu'
+                            ? 'Nữ'
+                            : 'Unisex'
+                      }
+                      onRemove={() => setFilter({ ...filter, gioiTinh: undefined })}
+                    />
+                  )}
 
-                {filter.khuyenMai && (
-                  <Badge
-                    filter="Đang sale"
-                    onRemove={() => setFilter({ ...filter, khuyenMai: undefined })}
-                  />
-                )}
+                  {filter.khuyenMai && (
+                    <Badge
+                      filter="Đang sale"
+                      onRemove={() => setFilter({ ...filter, khuyenMai: undefined })}
+                    />
+                  )}
 
-                {filter.sapXep && (
-                  <Badge
-                    filter={getSortLabel(filter.sapXep)}
-                    onRemove={() => setFilter({ ...filter, sapXep: undefined })}
-                  />
-                )}
-              </div>
-            )}
+                  {filter.sapXep && (
+                    <Badge
+                      filter={getSortLabel(filter.sapXep)}
+                      onRemove={() => setFilter({ ...filter, sapXep: undefined })}
+                    />
+                  )}
+                </div>
+              )}
 
             {loading ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

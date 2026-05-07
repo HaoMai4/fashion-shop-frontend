@@ -36,6 +36,9 @@ type BackendProduct = {
   images?: string[];
   soldQuantity?: number;
   createdAt?: string;
+  totalStock?: number;
+  stock?: number;
+  quantity?: number;
   availableColors?: string[];
   availableSizes?: string[];
   colorVariants?: Array<{
@@ -314,7 +317,7 @@ function mapBackendProductToSanPham(p: any): SanPham {
     null;
 
   const defaultSize =
-    defaultVariant?.sizes?.find((s: any) => (s.stock ?? 0) > 0) ||
+    defaultVariant?.sizes?.find((s: any) => Number(s.stock || 0) > 0) ||
     defaultVariant?.sizes?.[0] ||
     null;
 
@@ -388,18 +391,34 @@ function mapBackendProductToSanPham(p: any): SanPham {
     ).values()
   );
 
+  const variantSizes = Array.from(
+    new Set(
+      variants.flatMap((variant: any) =>
+        Array.isArray(variant?.sizes)
+          ? variant.sizes.map((s: any) => s.size).filter(Boolean)
+          : []
+      )
+    )
+  );
+
+  const colorVariantSizes = Array.isArray(p.colorVariants)
+    ? Array.from(
+      new Set(
+        p.colorVariants.flatMap((variant: any) =>
+          Array.isArray(variant?.sizes)
+            ? variant.sizes.map((s: any) => s.size).filter(Boolean)
+            : []
+        )
+      )
+    )
+    : [];
+
   const productSizes =
     Array.isArray(p.availableSizes) && p.availableSizes.length > 0
       ? p.availableSizes
-      : Array.from(
-        new Set(
-          variants.flatMap((variant: any) =>
-            Array.isArray(variant?.sizes)
-              ? variant.sizes.map((s: any) => s.size).filter(Boolean)
-              : []
-          )
-        )
-      );
+      : variantSizes.length > 0
+        ? variantSizes
+        : colorVariantSizes;
 
   const genderRaw =
     p.gender ||
@@ -410,6 +429,39 @@ function mapBackendProductToSanPham(p: any): SanPham {
     genderRaw === "nam" || genderRaw === "nu" || genderRaw === "unisex"
       ? genderRaw
       : "unisex";
+
+  const stockFromVariants = variants.reduce((sum: number, variant: any) => {
+    if (!Array.isArray(variant?.sizes)) return sum;
+
+    return (
+      sum +
+      variant.sizes.reduce(
+        (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
+        0
+      )
+    );
+  }, 0);
+
+  const stockFromColorVariants = Array.isArray(p.colorVariants)
+    ? p.colorVariants.reduce((sum: number, variant: any) => {
+      if (!Array.isArray(variant?.sizes)) return sum;
+
+      return (
+        sum +
+        variant.sizes.reduce(
+          (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
+          0
+        )
+      );
+    }, 0)
+    : 0;
+
+  const totalStock =
+    stockFromVariants > 0
+      ? stockFromVariants
+      : stockFromColorVariants > 0
+        ? stockFromColorVariants
+        : Number(p.totalStock ?? p.stock ?? p.quantity ?? 0);
 
   return {
     id: p._id,
@@ -437,18 +489,7 @@ function mapBackendProductToSanPham(p: any): SanPham {
     soLuongDanhGia: p.rating?.count || 0,
     chatLieu: p.material || "",
     donHang: 0,
-    soLuongTon:
-      variants.reduce((sum: number, variant: any) => {
-        if (!Array.isArray(variant?.sizes)) return sum;
-
-        return (
-          sum +
-          variant.sizes.reduce(
-            (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
-            0
-          )
-        );
-      }, 0) || 0,
+    soLuongTon: totalStock,
 
     variants,
     defaultVariantId: defaultVariant?._id || defaultVariant?.id || "",
@@ -457,7 +498,7 @@ function mapBackendProductToSanPham(p: any): SanPham {
     defaultPrice: currentPrice,
 
     bienThe: variants.map((v: any) => ({
-      id: v._id,
+      id: v._id || v.id,
       mau: v.color || "",
       maMau: v.colorCode || "#000000",
       hinhAnh: Array.isArray(v.images) ? v.images : [],
