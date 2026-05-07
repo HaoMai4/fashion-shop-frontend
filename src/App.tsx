@@ -30,6 +30,7 @@ import AdminProductsPage from "./pages/admin/AdminProductsPage";
 import AdminCategoriesPage from "./pages/admin/AdminCategoriesPage";
 import AdminStatsPage from "./pages/admin/AdminStatsPage";
 import AdminVouchersPage from "./pages/admin/AdminVouchersPage";
+import AdminSalesPage from "./pages/admin/AdminSalesPage";
 import NotFound from "./pages/NotFound";
 import AddressPage from "./pages/AddressPage";
 import VoucherWalletPage from "./pages/VoucherWalletPage";
@@ -82,6 +83,7 @@ const App = () => (
           <Route path="/admin/orders" element={<AdminOrdersPage />} />
           <Route path="/admin/order-reports" element={<AdminOrderReportsPage />} />
           <Route path="/admin/products" element={<AdminProductsPage />} />
+          <Route path="/admin/sales" element={<AdminSalesPage />} />
           <Route path="/admin/categories" element={<AdminCategoriesPage />} />
           <Route path="/admin/stats" element={<AdminStatsPage />} />
           <Route path="/admin/vouchers" element={<AdminVouchersPage />} />

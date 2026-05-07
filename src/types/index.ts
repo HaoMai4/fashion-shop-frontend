@@ -41,8 +41,14 @@ export interface MauSac {
 
 export interface KichThuocBienTheDetail {
   size: string;
+  sku?: string;
   price: number;
   discountPrice?: number;
+  discountPercent?: number;
+  onSale?: boolean;
+  saleStartAt?: string | null;
+  saleEndAt?: string | null;
+  saleNote?: string;
   finalPrice: number;
   stock: number;
 }

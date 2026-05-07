@@ -6,6 +6,7 @@ import {
   FileText,
   TicketPercent,
   FolderTree,
+  BadgePercent,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,42 +15,56 @@ import { Button } from '@/components/ui/button';
 const adminModules = [
   {
     title: 'Quản lý đơn hàng',
-    description: 'Xem danh sách đơn, lọc trạng thái, xem chi tiết và cập nhật trạng thái đơn hàng.',
+    description:
+      'Xem danh sách đơn, lọc trạng thái, xem chi tiết và cập nhật trạng thái đơn hàng.',
     href: '/admin/orders',
     icon: ShoppingBag,
     enabled: true,
   },
   {
     title: 'Yêu cầu hủy đơn',
-    description: 'Xem danh sách yêu cầu hủy đơn, duyệt hoặc từ chối yêu cầu từ khách hàng.',
+    description:
+      'Xem danh sách yêu cầu hủy đơn, duyệt hoặc từ chối yêu cầu từ khách hàng.',
     href: '/admin/order-reports',
     icon: FileText,
     enabled: true,
   },
   {
     title: 'Quản lý sản phẩm',
-    description: 'Quản lý sản phẩm gốc, biến thể, size, giá, tồn kho và xóa variant.',
+    description:
+      'Quản lý sản phẩm gốc, biến thể, size, giá, tồn kho và xóa variant.',
     href: '/admin/products',
     icon: Package,
     enabled: true,
   },
   {
+    title: 'Quản lý sale',
+    description:
+      'Xem sản phẩm đang sale, chỉnh giá giảm, nhập phần trăm giảm và tắt sale nhanh.',
+    href: '/admin/sales',
+    icon: BadgePercent,
+    enabled: true,
+  },
+  {
     title: 'Quản lý danh mục',
-    description: 'Thêm, chỉnh sửa và xóa danh mục sản phẩm đang dùng trên website.',
+    description:
+      'Thêm, chỉnh sửa và xóa danh mục sản phẩm đang dùng trên website.',
     href: '/admin/categories',
     icon: FolderTree,
     enabled: true,
   },
   {
     title: 'Quản lý voucher',
-    description: 'Tạo, chỉnh sửa, bật/tắt và ẩn/hiện voucher trong ví người dùng.',
+    description:
+      'Tạo, chỉnh sửa, bật/tắt và ẩn/hiện voucher trong ví người dùng.',
     href: '/admin/vouchers',
     icon: TicketPercent,
     enabled: true,
   },
   {
     title: 'Thống kê',
-    description: 'Xem tổng quan đơn hàng, doanh thu, top sản phẩm, sản phẩm bán chậm và top khách hàng.',
+    description:
+      'Xem tổng quan đơn hàng, doanh thu, top sản phẩm, sản phẩm bán chậm và top khách hàng.',
     href: '/admin/stats',
     icon: BarChart3,
     enabled: true,
@@ -81,7 +96,9 @@ export default function AdminPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">{module.description}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {module.description}
+                  </p>
 
                   {module.enabled ? (
                     <Button asChild className="w-full">

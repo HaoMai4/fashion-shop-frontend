@@ -25,11 +25,13 @@ type BackendProduct = {
     name?: string;
     slug?: string;
   };
-  categoryId?: string | {
-    _id?: string;
-    name?: string;
-    slug?: string;
-  };
+  categoryId?:
+    | string
+    | {
+        _id?: string;
+        name?: string;
+        slug?: string;
+      };
   price?: number;
   discountPrice?: number;
   finalPrice?: number;
@@ -45,6 +47,7 @@ type BackendProduct = {
     color: string;
     colorCode: string;
     images?: string[];
+    sizes?: any[];
   }>;
   variants?: any[];
   defaultVariant?: any;
@@ -61,9 +64,16 @@ export type AdminVariantSizeRecord = {
   _id?: string;
   size?: string;
   sku?: string;
-  price?: number;
-  discountPrice?: number;
   stock?: number;
+  price?: number;
+  originalPrice?: number;
+  discountPrice?: number;
+  discountPercent?: number;
+  onSale?: boolean;
+  saleStartAt?: string | null;
+  saleEndAt?: string | null;
+  saleNote?: string;
+  isDefault?: boolean;
 };
 
 export type AdminVariantRecord = {
@@ -95,7 +105,13 @@ export type AdminProductRecord = {
 export type AdminVariantSizePayload = {
   size: string;
   price: number;
+  originalPrice?: number;
   discountPrice?: number;
+  discountPercent?: number;
+  onSale?: boolean;
+  saleStartAt?: string | null;
+  saleEndAt?: string | null;
+  saleNote?: string;
   stock: number;
 };
 
@@ -125,6 +141,22 @@ type ProductColorOption = {
   ma: string;
 };
 
+type SizePriceInfo = {
+  price: number;
+  discountPrice: number;
+  finalPrice: number;
+  originalPrice?: number;
+  discountPercent: number;
+  onSale: boolean;
+};
+
+type VariantSizeCandidate = {
+  variant: any;
+  size: any;
+  priceInfo: SizePriceInfo;
+  stock: number;
+};
+
 function inferGenderFromSlug(slug?: string): "nam" | "nu" | "unisex" {
   const normalized = normalizeText(slug || "");
 
@@ -144,6 +176,160 @@ function normalizeText(value: any) {
 
 function isProductOnSale(product: SanPham) {
   return typeof product.giaGoc === "number" && product.giaGoc > product.gia;
+}
+
+function isSaleActive(size: any) {
+  const price = Number(size?.price || 0);
+  const discountPrice = Number(size?.discountPrice || 0);
+
+  if (!price || !discountPrice || discountPrice >= price) {
+    return false;
+  }
+
+  const now = Date.now();
+
+  if (size?.saleStartAt) {
+    const startTime = new Date(size.saleStartAt).getTime();
+
+    if (!Number.isNaN(startTime) && now < startTime) {
+      return false;
+    }
+  }
+
+  if (size?.saleEndAt) {
+    const endTime = new Date(size.saleEndAt).getTime();
+
+    if (!Number.isNaN(endTime) && now > endTime) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getSizePriceInfo(size: any): SizePriceInfo {
+  const price = Number(size?.price || 0);
+  const rawDiscountPrice = Number(size?.discountPrice || 0);
+  const activeSale = isSaleActive(size);
+
+  const discountPrice = activeSale ? rawDiscountPrice : 0;
+  const finalPrice = activeSale ? rawDiscountPrice : price;
+
+  return {
+    price,
+    discountPrice,
+    finalPrice,
+    originalPrice: activeSale ? price : undefined,
+    discountPercent: activeSale
+      ? Number(
+          size?.discountPercent ||
+            Math.round(((price - rawDiscountPrice) / price) * 100)
+        )
+      : 0,
+    onSale: activeSale,
+  };
+}
+
+function normalizeBackendSize(size: any) {
+  const priceInfo = getSizePriceInfo(size);
+
+  return {
+    ...size,
+    price: priceInfo.price,
+    discountPrice: priceInfo.discountPrice,
+    discountPercent: priceInfo.discountPercent,
+    onSale: priceInfo.onSale,
+    saleStartAt: size?.saleStartAt || null,
+    saleEndAt: size?.saleEndAt || null,
+    saleNote: size?.saleNote || "",
+    finalPrice: priceInfo.finalPrice,
+    stock: Number(size?.stock || 0),
+  };
+}
+
+function normalizeBackendVariant(variant: any) {
+  if (!variant) return null;
+
+  return {
+    ...variant,
+    sizes: Array.isArray(variant.sizes)
+      ? variant.sizes.map((size: any) => normalizeBackendSize(size))
+      : [],
+  };
+}
+
+function normalizeBackendVariants(variants: any[]) {
+  return variants
+    .map((variant) => normalizeBackendVariant(variant))
+    .filter(Boolean);
+}
+
+function collectVariantSizeCandidates(variants: any[]): VariantSizeCandidate[] {
+  const candidates: VariantSizeCandidate[] = [];
+
+  variants.forEach((variant) => {
+    if (!Array.isArray(variant?.sizes)) return;
+
+    variant.sizes.forEach((size: any) => {
+      const priceInfo = getSizePriceInfo(size);
+      const stock = Number(size?.stock || 0);
+
+      if (priceInfo.price > 0) {
+        candidates.push({
+          variant,
+          size,
+          priceInfo,
+          stock,
+        });
+      }
+    });
+  });
+
+  return candidates;
+}
+
+function pickDisplayCandidate(
+  variants: any[],
+  preferredVariant?: any | null
+): VariantSizeCandidate | null {
+  const candidates = collectVariantSizeCandidates(variants);
+
+  const activeSaleCandidate =
+    candidates
+      .filter((item) => item.priceInfo.onSale && item.stock > 0)
+      .sort((a, b) => a.priceInfo.finalPrice - b.priceInfo.finalPrice)[0] ||
+    candidates
+      .filter((item) => item.priceInfo.onSale)
+      .sort((a, b) => a.priceInfo.finalPrice - b.priceInfo.finalPrice)[0];
+
+  if (activeSaleCandidate) {
+    return activeSaleCandidate;
+  }
+
+  if (preferredVariant && Array.isArray(preferredVariant.sizes)) {
+    const preferredSize =
+      preferredVariant.sizes.find((size: any) => Number(size.stock || 0) > 0) ||
+      preferredVariant.sizes[0];
+
+    if (preferredSize) {
+      return {
+        variant: preferredVariant,
+        size: preferredSize,
+        priceInfo: getSizePriceInfo(preferredSize),
+        stock: Number(preferredSize.stock || 0),
+      };
+    }
+  }
+
+  const inStockCandidate = candidates
+    .filter((item) => item.stock > 0)
+    .sort((a, b) => a.priceInfo.finalPrice - b.priceInfo.finalPrice)[0];
+
+  if (inStockCandidate) {
+    return inStockCandidate;
+  }
+
+  return candidates.sort((a, b) => a.priceInfo.finalPrice - b.priceInfo.finalPrice)[0] || null;
 }
 
 function matchCategory(product: SanPham, category: string) {
@@ -217,7 +403,10 @@ function matchSearchKeyword(product: SanPham, rawKeyword: string) {
       [
         keyword,
         keyword.replace(/^(ao|quan|do)\s+/g, "").trim(),
-        keyword.replace(/\b(ao|quan|do|san|pham)\b/g, " ").replace(/\s+/g, " ").trim(),
+        keyword
+          .replace(/\b(ao|quan|do|san|pham)\b/g, " ")
+          .replace(/\s+/g, " ")
+          .trim(),
       ].filter(Boolean)
     )
   );
@@ -308,18 +497,30 @@ function applyLocalFilters(products: SanPham[], filter?: ProductFilter) {
 }
 
 function mapBackendProductToSanPham(p: any): SanPham {
-  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const rawVariants = Array.isArray(p.variants) ? p.variants : [];
+  const variants = normalizeBackendVariants(rawVariants);
+
+  const backendDefaultVariant = p.defaultVariant
+    ? normalizeBackendVariant(p.defaultVariant)
+    : null;
+
+  const displayCandidate = pickDisplayCandidate(variants, backendDefaultVariant);
 
   const defaultVariant =
-    p.defaultVariant ||
+    displayCandidate?.variant ||
+    backendDefaultVariant ||
     variants.find((v: any) => Array.isArray(v?.images) && v.images.length > 0) ||
     variants[0] ||
     null;
 
   const defaultSize =
+    displayCandidate?.size ||
     defaultVariant?.sizes?.find((s: any) => Number(s.stock || 0) > 0) ||
     defaultVariant?.sizes?.[0] ||
     null;
+
+  const displayPriceInfo =
+    displayCandidate?.priceInfo || getSizePriceInfo(defaultSize);
 
   const image =
     p.images?.[0] ||
@@ -327,24 +528,12 @@ function mapBackendProductToSanPham(p: any): SanPham {
     p.colorVariants?.[0]?.images?.[0] ||
     "/placeholder.svg";
 
-  const sizePrice = Number(defaultSize?.price || 0);
-  const sizeDiscountPrice = Number(defaultSize?.discountPrice || 0);
-
   const currentPrice =
-    Number(p.finalPrice || 0) ||
-    Number(p.discountPrice || 0) ||
-    (sizeDiscountPrice > 0 ? sizeDiscountPrice : 0) ||
-    Number(defaultSize?.finalPrice || 0) ||
-    sizePrice ||
+    displayPriceInfo.finalPrice ||
     Number(p.price || 0) ||
     0;
 
-  const originalPrice =
-    sizePrice > 0 && currentPrice > 0 && currentPrice < sizePrice
-      ? sizePrice
-      : typeof p.price === "number" && currentPrice < p.price
-        ? p.price
-        : undefined;
+  const originalPrice = displayPriceInfo.originalPrice;
 
   const category =
     p.category ||
@@ -370,19 +559,19 @@ function mapBackendProductToSanPham(p: any): SanPham {
 
   const colorVariantColors: ProductColorOption[] = Array.isArray(p.colorVariants)
     ? p.colorVariants
-      .map((v: any): ProductColorOption | null => {
-        const ten = typeof v.color === "string" ? v.color.trim() : "";
-        if (!ten) return null;
+        .map((v: any): ProductColorOption | null => {
+          const ten = typeof v.color === "string" ? v.color.trim() : "";
+          if (!ten) return null;
 
-        return {
-          ten,
-          ma:
-            typeof v.colorCode === "string" && v.colorCode.trim()
-              ? v.colorCode
-              : "#000000",
-        };
-      })
-      .filter((c): c is ProductColorOption => c !== null)
+          return {
+            ten,
+            ma:
+              typeof v.colorCode === "string" && v.colorCode.trim()
+                ? v.colorCode
+                : "#000000",
+          };
+        })
+        .filter((c): c is ProductColorOption => c !== null)
     : [];
 
   const colors = Array.from(
@@ -403,14 +592,14 @@ function mapBackendProductToSanPham(p: any): SanPham {
 
   const colorVariantSizes = Array.isArray(p.colorVariants)
     ? Array.from(
-      new Set(
-        p.colorVariants.flatMap((variant: any) =>
-          Array.isArray(variant?.sizes)
-            ? variant.sizes.map((s: any) => s.size).filter(Boolean)
-            : []
+        new Set(
+          p.colorVariants.flatMap((variant: any) =>
+            Array.isArray(variant?.sizes)
+              ? variant.sizes.map((s: any) => s.size).filter(Boolean)
+              : []
+          )
         )
       )
-    )
     : [];
 
   const productSizes =
@@ -444,16 +633,16 @@ function mapBackendProductToSanPham(p: any): SanPham {
 
   const stockFromColorVariants = Array.isArray(p.colorVariants)
     ? p.colorVariants.reduce((sum: number, variant: any) => {
-      if (!Array.isArray(variant?.sizes)) return sum;
+        if (!Array.isArray(variant?.sizes)) return sum;
 
-      return (
-        sum +
-        variant.sizes.reduce(
-          (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
-          0
-        )
-      );
-    }, 0)
+        return (
+          sum +
+          variant.sizes.reduce(
+            (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
+            0
+          )
+        );
+      }, 0)
     : 0;
 
   const totalStock =
@@ -503,36 +692,53 @@ function mapBackendProductToSanPham(p: any): SanPham {
       maMau: v.colorCode || "#000000",
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
-        ? v.sizes.map((s: any) => ({
-          size: s.size,
-          sku: s.sku || "",
-          price: s.price,
-          discountPrice: s.discountPrice,
-          finalPrice:
-            typeof s.finalPrice === "number"
-              ? s.finalPrice
-              : s.discountPrice && s.discountPrice > 0
-                ? s.discountPrice
-                : s.price,
-          stock: s.stock || 0,
-        }))
+        ? v.sizes.map((s: any) => {
+            const priceInfo = getSizePriceInfo(s);
+
+            return {
+              size: s.size,
+              sku: s.sku || "",
+              price: priceInfo.price,
+              discountPrice: priceInfo.discountPrice,
+              discountPercent: priceInfo.discountPercent,
+              onSale: priceInfo.onSale,
+              saleStartAt: s.saleStartAt || null,
+              saleEndAt: s.saleEndAt || null,
+              saleNote: s.saleNote || "",
+              finalPrice: priceInfo.finalPrice,
+              stock: s.stock || 0,
+            };
+          })
         : [],
     })),
   } as SanPham;
 }
 
 function mapProductDetailToSanPham(p: any): SanPham {
-  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const rawVariants = Array.isArray(p.variants) ? p.variants : [];
+  const variants = normalizeBackendVariants(rawVariants);
+
+  const backendDefaultVariant = p.defaultVariant
+    ? normalizeBackendVariant(p.defaultVariant)
+    : null;
+
+  const displayCandidate = pickDisplayCandidate(variants, backendDefaultVariant);
 
   const defaultVariant =
+    displayCandidate?.variant ||
+    backendDefaultVariant ||
     variants.find((v: any) => Array.isArray(v?.images) && v.images.length > 0) ||
     variants[0] ||
     null;
 
   const defaultSize =
+    displayCandidate?.size ||
     defaultVariant?.sizes?.find((s: any) => (s.stock ?? 0) > 0) ||
     defaultVariant?.sizes?.[0] ||
     null;
+
+  const displayPriceInfo =
+    displayCandidate?.priceInfo || getSizePriceInfo(defaultSize);
 
   const image = defaultVariant?.images?.[0] || p.images?.[0] || "/placeholder.svg";
 
@@ -544,16 +750,12 @@ function mapProductDetailToSanPham(p: any): SanPham {
         : ["/placeholder.svg"];
 
   const currentPrice =
-    p.minPrice ??
-    defaultSize?.finalPrice ??
-    defaultSize?.discountPrice ??
-    defaultSize?.price ??
+    displayPriceInfo.finalPrice ||
+    Number(p.minPrice || 0) ||
+    Number(defaultSize?.price || 0) ||
     0;
 
-  const originalPrice =
-    typeof defaultSize?.price === "number" && currentPrice < defaultSize.price
-      ? defaultSize.price
-      : undefined;
+  const originalPrice = displayPriceInfo.originalPrice;
 
   const colors: ProductColorOption[] = variants
     .map((v: any): ProductColorOption | null => {
@@ -631,19 +833,23 @@ function mapProductDetailToSanPham(p: any): SanPham {
       maMau: v.colorCode || "#000000",
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
-        ? v.sizes.map((s: any) => ({
-          size: s.size,
-          sku: s.sku || "",
-          price: s.price,
-          discountPrice: s.discountPrice,
-          finalPrice:
-            typeof s.finalPrice === "number"
-              ? s.finalPrice
-              : s.discountPrice && s.discountPrice > 0
-                ? s.discountPrice
-                : s.price,
-          stock: s.stock || 0,
-        }))
+        ? v.sizes.map((s: any) => {
+            const priceInfo = getSizePriceInfo(s);
+
+            return {
+              size: s.size,
+              sku: s.sku || "",
+              price: priceInfo.price,
+              discountPrice: priceInfo.discountPrice,
+              discountPercent: priceInfo.discountPercent,
+              onSale: priceInfo.onSale,
+              saleStartAt: s.saleStartAt || null,
+              saleEndAt: s.saleEndAt || null,
+              saleNote: s.saleNote || "",
+              finalPrice: priceInfo.finalPrice,
+              stock: s.stock || 0,
+            };
+          })
         : [],
     })),
 
@@ -691,7 +897,8 @@ function buildSearchQuery(filter?: ProductFilter) {
 }
 
 async function apiFormRequest(path: string, formData: FormData, method = "POST") {
-  const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
+  const token =
+    localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
 
   const headers: Record<string, string> = {};
   if (token) {
@@ -884,7 +1091,7 @@ export const productService = {
 
   async clearSearchHistory() {
     try {
-      return await apiRequest("/api/products/search-history", {
+      return apiRequest("/api/products/search-history", {
         method: "DELETE",
         auth: true,
       });
@@ -898,7 +1105,7 @@ export const productService = {
     if (!id) return null;
 
     try {
-      return await apiRequest(
+      return apiRequest(
         `/api/products/search-history/item/${encodeURIComponent(id)}`,
         {
           method: "DELETE",

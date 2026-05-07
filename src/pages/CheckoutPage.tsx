@@ -146,7 +146,7 @@ function getVoucherDescription(voucher: UserVoucher) {
 
 export default function CheckoutPage() {
   const location = useLocation();
-  const { items, clearCart } = useCart();
+  const { items, clearCart, refreshCartPrices } = useCart();
 
   const loggedIn = isLoggedIn();
   const storedUser = getStoredUser();
@@ -480,6 +480,15 @@ export default function CheckoutPage() {
 
     if (isSubmitting) return;
     if (!validateForm()) return;
+
+    if (mode === 'cart') {
+      const result = await refreshCartPrices();
+
+      if (result.changed) {
+        toast.info('Giá hoặc tồn kho trong giỏ hàng vừa được cập nhật. Vui lòng kiểm tra lại trước khi đặt hàng.');
+        return;
+      }
+    }
 
     try {
       setIsSubmitting(true);

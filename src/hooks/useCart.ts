@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ChiTietGioHang, SanPham } from '@/types';
+import { productService } from '@/services/api/productService';
 import { toast } from 'sonner';
 
 const CART_KEY = 'matewear_cart';
@@ -212,6 +213,84 @@ export function useCart() {
     notifyCartUpdated();
   }, []);
 
+  const refreshCartPrices = useCallback(async () => {
+    const currentItems = loadCart();
+
+    if (!currentItems.length) {
+      return {
+        changed: false,
+        items: currentItems,
+      };
+    }
+
+    let changed = false;
+
+    const nextItems = await Promise.all(
+      currentItems.map(async (item) => {
+        try {
+          if (!item.variantId || !item.kichCo) {
+            return item;
+          }
+
+          const data: any = await productService.getVariantDetails(
+            item.variantId,
+            item.kichCo
+          );
+
+          const selectedSize = data?.selectedSize;
+
+          if (!selectedSize) {
+            return item;
+          }
+
+          const nextPrice = Number(selectedSize.finalPrice || item.gia || 0);
+          const nextStock = Number(selectedSize.stock || 0);
+          const currentStock = Number(item.sanPham?.soLuongTon || 0);
+          const currentQuantity = Number(item.soLuong || 0);
+
+          const priceChanged = nextPrice > 0 && nextPrice !== Number(item.gia || 0);
+          const stockChanged = nextStock !== currentStock;
+          const quantityOverStock = nextStock > 0 && currentQuantity > nextStock;
+
+          if (!priceChanged && !stockChanged && !quantityOverStock) {
+            return item;
+          }
+
+          changed = true;
+
+          return {
+            ...item,
+            gia: nextPrice,
+            soLuong: quantityOverStock ? nextStock : item.soLuong,
+            sanPham: {
+              ...item.sanPham,
+              gia: nextPrice,
+              giaGoc:
+                selectedSize.onSale && Number(selectedSize.price || 0) > nextPrice
+                  ? Number(selectedSize.price || 0)
+                  : undefined,
+              soLuongTon: nextStock,
+            },
+          };
+        } catch (error) {
+          console.warn('refresh cart item price failed:', error);
+          return item;
+        }
+      })
+    );
+
+    if (changed) {
+      saveCart(nextItems);
+      setItems(nextItems);
+      notifyCartUpdated();
+    }
+
+    return {
+      changed,
+      items: nextItems,
+    };
+  }, []);
+
   const tongTien = items.reduce((sum, i) => sum + i.gia * i.soLuong, 0);
   const tongSoLuong = items.reduce((sum, i) => sum + i.soLuong, 0);
 
@@ -221,6 +300,7 @@ export function useCart() {
     removeItem,
     updateQuantity,
     clearCart,
+    refreshCartPrices,
     tongTien,
     tongSoLuong,
   };
