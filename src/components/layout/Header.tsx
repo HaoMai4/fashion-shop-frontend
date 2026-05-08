@@ -25,10 +25,10 @@ import type { SanPham } from '@/types';
 
 const navItems = [
   { label: 'Tất cả', href: '/san-pham' },
-  { label: 'Nam', href: '/san-pham?gioiTinh=nam' },
-  { label: 'Nữ', href: '/san-pham?gioiTinh=nu' },
-  { label: 'Thể thao', href: '/san-pham?danhMuc=Đồ Thể Thao' },
-  { label: 'Phụ kiện', href: '/san-pham?danhMuc=Phụ Kiện' },
+  { label: 'Nam', href: '/san-pham?danhMuc=nam' },
+  { label: 'Nữ', href: '/san-pham?danhMuc=nu' },
+  { label: 'Thể thao', href: '/san-pham?danhMuc=the-thao' },
+  { label: 'Phụ kiện', href: '/san-pham?danhMuc=phu-kien' },
   { label: 'Đang sale', href: '/san-pham?khuyenMai=true' },
   { label: 'Bộ sưu tập', href: '/san-pham' },
   { label: 'AI Tư vấn', href: '/ai-tu-van', icon: true },

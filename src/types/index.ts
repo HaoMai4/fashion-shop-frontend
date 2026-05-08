@@ -11,6 +11,8 @@ export interface SanPham {
   hinhAnh: string;
   danhMuc: string;
   danhMucId: string;
+  danhMucSlug?: string;
+  danhMucPath?: string;
   gioiTinh: "nam" | "nu" | "unisex";
   thuongHieu?: string;
   tags: string[];
@@ -193,6 +195,7 @@ export interface ChatResponse {
 
 export interface ProductFilter {
   danhMuc?: string;
+  danhMucIds?: string[];
   gioiTinh?: string;
   giaMin?: number;
   giaMax?: number;

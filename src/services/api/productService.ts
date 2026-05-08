@@ -24,14 +24,16 @@ type BackendProduct = {
     _id?: string;
     name?: string;
     slug?: string;
+    path?: string;
   };
   categoryId?:
-    | string
-    | {
-        _id?: string;
-        name?: string;
-        slug?: string;
-      };
+  | string
+  | {
+    _id?: string;
+    name?: string;
+    slug?: string;
+    path?: string;
+  };
   price?: number;
   discountPrice?: number;
   finalPrice?: number;
@@ -58,6 +60,16 @@ export type AdminCategoryRecord = {
   name: string;
   slug: string;
   path?: string;
+  parentId?: string | { _id?: string; name?: string; slug?: string } | null;
+  level?: number;
+  group?: string;
+  type?: string;
+  sortOrder?: number;
+  status?: string;
+  productCount?: number;
+  childrenCount?: number;
+  canDelete?: boolean;
+  children?: AdminCategoryRecord[];
 };
 
 export type AdminVariantSizeRecord = {
@@ -222,9 +234,9 @@ function getSizePriceInfo(size: any): SizePriceInfo {
     originalPrice: activeSale ? price : undefined,
     discountPercent: activeSale
       ? Number(
-          size?.discountPercent ||
-            Math.round(((price - rawDiscountPrice) / price) * 100)
-        )
+        size?.discountPercent ||
+        Math.round(((price - rawDiscountPrice) / price) * 100)
+      )
       : 0,
     onSale: activeSale,
   };
@@ -359,6 +371,12 @@ function matchCategory(product: SanPham, category: string) {
   return false;
 }
 
+function matchCategoryIds(product: SanPham, categoryIds: string[]) {
+  if (!categoryIds.length) return true;
+
+  return categoryIds.includes(product.danhMucId);
+}
+
 function matchColor(product: SanPham, colors: string[]) {
   if (!colors.length) return true;
 
@@ -444,7 +462,11 @@ function applyLocalFilters(products: SanPham[], filter?: ProductFilter) {
     result = result.filter((product) => product.gioiTinh === filter.gioiTinh);
   }
 
-  if (filter.danhMuc) {
+  if (filter.danhMucIds?.length) {
+    result = result.filter((product) =>
+      matchCategoryIds(product, filter.danhMucIds || [])
+    );
+  } else if (filter.danhMuc) {
     result = result.filter((product) => matchCategory(product, filter.danhMuc!));
   }
 
@@ -559,19 +581,19 @@ function mapBackendProductToSanPham(p: any): SanPham {
 
   const colorVariantColors: ProductColorOption[] = Array.isArray(p.colorVariants)
     ? p.colorVariants
-        .map((v: any): ProductColorOption | null => {
-          const ten = typeof v.color === "string" ? v.color.trim() : "";
-          if (!ten) return null;
+      .map((v: any): ProductColorOption | null => {
+        const ten = typeof v.color === "string" ? v.color.trim() : "";
+        if (!ten) return null;
 
-          return {
-            ten,
-            ma:
-              typeof v.colorCode === "string" && v.colorCode.trim()
-                ? v.colorCode
-                : "#000000",
-          };
-        })
-        .filter((c): c is ProductColorOption => c !== null)
+        return {
+          ten,
+          ma:
+            typeof v.colorCode === "string" && v.colorCode.trim()
+              ? v.colorCode
+              : "#000000",
+        };
+      })
+      .filter((c): c is ProductColorOption => c !== null)
     : [];
 
   const colors = Array.from(
@@ -592,14 +614,14 @@ function mapBackendProductToSanPham(p: any): SanPham {
 
   const colorVariantSizes = Array.isArray(p.colorVariants)
     ? Array.from(
-        new Set(
-          p.colorVariants.flatMap((variant: any) =>
-            Array.isArray(variant?.sizes)
-              ? variant.sizes.map((s: any) => s.size).filter(Boolean)
-              : []
-          )
+      new Set(
+        p.colorVariants.flatMap((variant: any) =>
+          Array.isArray(variant?.sizes)
+            ? variant.sizes.map((s: any) => s.size).filter(Boolean)
+            : []
         )
       )
+    )
     : [];
 
   const productSizes =
@@ -633,16 +655,16 @@ function mapBackendProductToSanPham(p: any): SanPham {
 
   const stockFromColorVariants = Array.isArray(p.colorVariants)
     ? p.colorVariants.reduce((sum: number, variant: any) => {
-        if (!Array.isArray(variant?.sizes)) return sum;
+      if (!Array.isArray(variant?.sizes)) return sum;
 
-        return (
-          sum +
-          variant.sizes.reduce(
-            (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
-            0
-          )
-        );
-      }, 0)
+      return (
+        sum +
+        variant.sizes.reduce(
+          (sizeSum: number, size: any) => sizeSum + Number(size.stock || 0),
+          0
+        )
+      );
+    }, 0)
     : 0;
 
   const totalStock =
@@ -666,6 +688,8 @@ function mapBackendProductToSanPham(p: any): SanPham {
       category?._id ||
       (typeof p.categoryId === "string" ? p.categoryId : "") ||
       "",
+    danhMucSlug: category?.slug || "",
+    danhMucPath: category?.path || "",
     gioiTinh,
     thuongHieu: p.brand || "",
     tags: Array.isArray(p.tags) ? p.tags : [],
@@ -693,22 +717,22 @@ function mapBackendProductToSanPham(p: any): SanPham {
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => {
-            const priceInfo = getSizePriceInfo(s);
+          const priceInfo = getSizePriceInfo(s);
 
-            return {
-              size: s.size,
-              sku: s.sku || "",
-              price: priceInfo.price,
-              discountPrice: priceInfo.discountPrice,
-              discountPercent: priceInfo.discountPercent,
-              onSale: priceInfo.onSale,
-              saleStartAt: s.saleStartAt || null,
-              saleEndAt: s.saleEndAt || null,
-              saleNote: s.saleNote || "",
-              finalPrice: priceInfo.finalPrice,
-              stock: s.stock || 0,
-            };
-          })
+          return {
+            size: s.size,
+            sku: s.sku || "",
+            price: priceInfo.price,
+            discountPrice: priceInfo.discountPrice,
+            discountPercent: priceInfo.discountPercent,
+            onSale: priceInfo.onSale,
+            saleStartAt: s.saleStartAt || null,
+            saleEndAt: s.saleEndAt || null,
+            saleNote: s.saleNote || "",
+            finalPrice: priceInfo.finalPrice,
+            stock: s.stock || 0,
+          };
+        })
         : [],
     })),
   } as SanPham;
@@ -807,6 +831,8 @@ function mapProductDetailToSanPham(p: any): SanPham {
     hinhAnhList: imageList,
     danhMuc: categoryName,
     danhMucId: category?._id || "",
+    danhMucSlug: category?.slug || "",
+    danhMucPath: category?.path || "",
     gioiTinh,
     thuongHieu: p.brand || "",
     tags: p.tags || [],
@@ -834,22 +860,22 @@ function mapProductDetailToSanPham(p: any): SanPham {
       hinhAnh: Array.isArray(v.images) ? v.images : [],
       kichThuoc: Array.isArray(v.sizes)
         ? v.sizes.map((s: any) => {
-            const priceInfo = getSizePriceInfo(s);
+          const priceInfo = getSizePriceInfo(s);
 
-            return {
-              size: s.size,
-              sku: s.sku || "",
-              price: priceInfo.price,
-              discountPrice: priceInfo.discountPrice,
-              discountPercent: priceInfo.discountPercent,
-              onSale: priceInfo.onSale,
-              saleStartAt: s.saleStartAt || null,
-              saleEndAt: s.saleEndAt || null,
-              saleNote: s.saleNote || "",
-              finalPrice: priceInfo.finalPrice,
-              stock: s.stock || 0,
-            };
-          })
+          return {
+            size: s.size,
+            sku: s.sku || "",
+            price: priceInfo.price,
+            discountPrice: priceInfo.discountPrice,
+            discountPercent: priceInfo.discountPercent,
+            onSale: priceInfo.onSale,
+            saleStartAt: s.saleStartAt || null,
+            saleEndAt: s.saleEndAt || null,
+            saleNote: s.saleNote || "",
+            finalPrice: priceInfo.finalPrice,
+            stock: s.stock || 0,
+          };
+        })
         : [],
     })),
 
@@ -1132,12 +1158,25 @@ export const productService = {
     return apiRequest<AdminCategoryRecord[]>("/api/categories");
   },
 
+  async getCategoryTree() {
+    const res = await apiRequest<{
+      categories?: AdminCategoryRecord[];
+      data?: AdminCategoryRecord[];
+    }>("/api/categories/tree");
+
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.categories)) return res.categories;
+
+    return [];
+  },
+
   async getAdminProducts() {
     return apiRequest<{ status?: string; message?: string; data?: AdminProductRecord[] }>(
       "/api/products",
       {
         auth: true,
       }
+
     );
   },
 

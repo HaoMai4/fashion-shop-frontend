@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Edit, ImagePlus, Package, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Edit,
+  ImagePlus,
+  Package,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -107,7 +117,7 @@ function getCategoryName(
   }
 
   if (typeof product.categoryId === 'string') {
-    const matched = categories.find((item) => item._id === product.categoryId);
+    const matched = findCategoryById(categories, product.categoryId);
     return matched?.name || product.categoryId;
   }
 
@@ -205,6 +215,177 @@ function mapSizeRecordToForm(sizeItem?: AdminVariantSizeRecord): VariantSizeForm
   };
 }
 
+function flattenCategoryTree(
+  categories: AdminCategoryRecord[],
+  depth = 0
+): Array<AdminCategoryRecord & { depth: number; isLeaf: boolean; displayPath: string }> {
+  return categories.flatMap((category) => {
+    const children = Array.isArray(category.children) ? category.children : [];
+    const isLeaf = children.length === 0;
+
+    const current = {
+      ...category,
+      depth,
+      isLeaf,
+      displayPath: category.path || category.name,
+    };
+
+    return [current, ...flattenCategoryTree(children, depth + 1)];
+  });
+}
+
+function findCategoryById(
+  categories: AdminCategoryRecord[],
+  categoryId: string
+): AdminCategoryRecord | null {
+  for (const category of categories) {
+    if (category._id === categoryId) return category;
+
+    const found = findCategoryById(category.children || [], categoryId);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function formatCategoryPath(path?: string) {
+  if (!path) return 'Chưa chọn danh mục';
+
+  return path
+    .split('/')
+    .filter(Boolean)
+    .map((part) =>
+      part
+        .split('-')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+    )
+    .join(' / ');
+}
+
+type CategoryPickerProps = {
+  categories: AdminCategoryRecord[];
+  selectedId: string;
+  disabled?: boolean;
+  onSelect: (category: AdminCategoryRecord) => void;
+};
+
+function CategoryPicker({
+  categories,
+  selectedId,
+  disabled,
+  onSelect,
+}: CategoryPickerProps) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setExpandedIds(new Set());
+  }, [categories]);
+
+  const toggle = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  };
+
+  const renderNode = (category: AdminCategoryRecord, depth = 0) => {
+    const children = Array.isArray(category.children) ? category.children : [];
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedIds.has(category._id);
+    const isSelected = selectedId === category._id;
+    const canSelect = !hasChildren;
+
+    return (
+      <div key={category._id}>
+        <div
+          className={[
+            'flex items-center gap-2 rounded-md px-2 py-2 text-sm transition',
+            isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
+            disabled ? 'opacity-60' : '',
+          ].join(' ')}
+          style={{ paddingLeft: `${8 + depth * 20}px` }}
+        >
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-background"
+            onClick={() => hasChildren && toggle(category._id)}
+            disabled={disabled || !hasChildren}
+          >
+            {hasChildren ? (
+              isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )
+            ) : (
+              <span className="h-4 w-4" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            className={[
+              'flex flex-1 items-center justify-between gap-3 rounded px-2 py-1 text-left',
+              disabled ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer',
+            ].join(' ')}
+            onClick={() => {
+              if (disabled) return;
+
+              if (hasChildren) {
+                toggle(category._id);
+                return;
+              }
+
+              onSelect(category);
+            }}
+            disabled={disabled}
+          >
+            <span className="font-medium">{category.name}</span>
+
+            {hasChildren ? (
+              <span className="text-xs text-muted-foreground">
+                Chọn danh mục con
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {category.productCount || 0} sản phẩm
+              </span>
+            )}
+          </button>
+        </div>
+
+        {hasChildren && isExpanded ? (
+          <div>
+            {children.map((child) => renderNode(child, depth + 1))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  if (!categories.length) {
+    return (
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        Chưa có danh mục để chọn.
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-72 overflow-y-auto rounded-md border p-2">
+      {categories.map((category) => renderNode(category))}
+    </div>
+  );
+}
+
 const emptyProductForm: ProductForm = {
   name: '',
   slug: '',
@@ -281,6 +462,14 @@ export default function AdminProductsPage() {
     [products, selectedVariantProductId]
   );
 
+  const flatCategories = useMemo(() => flattenCategoryTree(categories), [categories]);
+
+  const selectedProductCategory = useMemo(() => {
+    return productForm.categoryId
+      ? findCategoryById(categories, productForm.categoryId)
+      : null;
+  }, [categories, productForm.categoryId]);
+
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -297,7 +486,7 @@ export default function AdminProductsPage() {
   const fetchCategories = async () => {
     setLoadingCategories(true);
     try {
-      const res = await productService.getCategories();
+      const res = await productService.getCategoryTree();
       setCategories(Array.isArray(res) ? res : []);
     } catch (error: any) {
       console.error('getCategories error:', error);
@@ -1150,23 +1339,30 @@ export default function AdminProductsPage() {
                       />
                     </div>
 
-                    <div>
+                    <div className="md:col-span-2">
                       <label className="mb-2 block text-sm font-medium">
                         Danh mục <span className="text-destructive">*</span>
                       </label>
-                      <select
-                        value={productForm.categoryId}
-                        onChange={(e) => handleChangeProductForm('categoryId', e.target.value)}
+
+                      <CategoryPicker
+                        categories={categories}
+                        selectedId={productForm.categoryId}
                         disabled={submittingProduct || loadingCategories}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value="">Chọn danh mục</option>
-                        {categories.map((category) => (
-                          <option key={category._id} value={category._id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
+                        onSelect={(category) => handleChangeProductForm('categoryId', category._id)}
+                      />
+
+                      <div className="mt-2 rounded-md bg-muted p-3 text-sm">
+                        <p className="font-medium">Danh mục đã chọn</p>
+                        <p className="mt-1 text-muted-foreground">
+                          {selectedProductCategory
+                            ? formatCategoryPath(selectedProductCategory.path)
+                            : 'Chưa chọn danh mục'}
+                        </p>
+                      </div>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Chỉ chọn danh mục cuối cùng, ví dụ Áo Sơ Mi Nam hoặc Quần Short Nam. Không chọn nhóm cha như Nam hoặc Áo Nam.
+                      </p>
                     </div>
 
                     <div>
@@ -2055,8 +2251,13 @@ export default function AdminProductsPage() {
                   disabled={loadingCategories}
                 >
                   <option value="all">Tất cả danh mục</option>
-                  {categories.map((category) => (
-                    <option key={category._id} value={category._id}>
+                  {flatCategories.map((category) => (
+                    <option
+                      key={category._id}
+                      value={category._id}
+                      disabled={!category.isLeaf}
+                    >
+                      {'— '.repeat(category.depth)}
                       {category.name}
                     </option>
                   ))}
