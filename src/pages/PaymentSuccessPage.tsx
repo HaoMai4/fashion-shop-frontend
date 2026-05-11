@@ -6,8 +6,14 @@ import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { orderService, type PaymentStatusResponse } from '@/services/api/orderService';
 import { formatPrice } from '@/utils/format';
+import { useCart } from '@/hooks/useCart';
 
 const PENDING_PAYOS_ORDER_KEY = 'matewear_pending_payos_order';
+const PENDING_PAYOS_SOURCE_KEY = 'matewear_pending_payos_source';
+const PENDING_PAYOS_BUY_NOW_SLUG_KEY = 'matewear_pending_payos_buy_now_slug';
+const SELECTED_CART_ITEM_IDS_KEY = 'matewear_selected_cart_item_ids';
+const REORDER_CHECKOUT_KEY = 'matewear_reorder_checkout';
+const PENDING_PAYOS_CHECKOUT_DRAFT_KEY = 'matewear_pending_payos_checkout_draft';
 
 function getStatusText(status?: string) {
   switch (status) {
@@ -28,6 +34,7 @@ export default function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
   const [payment, setPayment] = useState<PaymentStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const { removeItems } = useCart();
 
   const orderCode = useMemo(() => {
     return (
@@ -51,7 +58,31 @@ export default function PaymentSuccessPage() {
         setPayment(data);
 
         if (data.paymentStatus === 'paid') {
+          const source = localStorage.getItem(PENDING_PAYOS_SOURCE_KEY) || 'cart';
+
+          if (source === 'cart') {
+            try {
+              const raw = localStorage.getItem(SELECTED_CART_ITEM_IDS_KEY);
+              const parsed = raw ? JSON.parse(raw) : [];
+
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const selectedIds = parsed
+                  .map((id) => Number(id))
+                  .filter((id) => Number.isFinite(id));
+
+                removeItems(selectedIds);
+              }
+            } catch (error) {
+              console.error('remove paid cart items error:', error);
+            }
+          }
+
           localStorage.removeItem(PENDING_PAYOS_ORDER_KEY);
+          localStorage.removeItem(PENDING_PAYOS_SOURCE_KEY);
+          localStorage.removeItem(PENDING_PAYOS_BUY_NOW_SLUG_KEY);
+          localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+          localStorage.removeItem(REORDER_CHECKOUT_KEY);
+          localStorage.removeItem(PENDING_PAYOS_CHECKOUT_DRAFT_KEY);
         }
       } catch (error) {
         console.error('checkPaymentStatus success error:', error);
@@ -61,7 +92,7 @@ export default function PaymentSuccessPage() {
     };
 
     loadPaymentStatus();
-  }, [orderCode]);
+  }, [orderCode, removeItems]);
 
   return (
     <MainLayout>
@@ -118,7 +149,7 @@ export default function PaymentSuccessPage() {
 
           {orderCode ? (
             <Button variant="outline" asChild>
-              <Link to={`/tra-cuu-don-hang/${orderCode}`}>Xem đơn hàng</Link>
+              <Link to={`/don-hang/${orderCode}`}>Xem đơn hàng</Link>
             </Button>
           ) : (
             <Button variant="outline" asChild>

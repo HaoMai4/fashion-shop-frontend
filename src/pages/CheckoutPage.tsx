@@ -30,6 +30,12 @@ import {
 import type { ChiTietGioHang } from '@/types';
 
 const BUY_NOW_STORAGE_KEY = 'matewear_buy_now';
+const PENDING_PAYOS_ORDER_KEY = 'matewear_pending_payos_order';
+const PENDING_PAYOS_SOURCE_KEY = 'matewear_pending_payos_source';
+const PENDING_PAYOS_BUY_NOW_SLUG_KEY = 'matewear_pending_payos_buy_now_slug';
+const SELECTED_CART_ITEM_IDS_KEY = 'matewear_selected_cart_item_ids';
+const REORDER_CHECKOUT_KEY = 'matewear_reorder_checkout';
+const PENDING_PAYOS_CHECKOUT_DRAFT_KEY = 'matewear_pending_payos_checkout_draft';
 
 type PaymentType = 'COD' | 'PayOS';
 
@@ -58,6 +64,19 @@ type BuyNowItem = {
   };
 };
 
+type ReorderCheckoutDraft = {
+  sourceOrderCode?: string;
+  items: BuyNowItem[];
+  shippingAddress?: {
+    fullName?: string;
+    phone?: string;
+    email?: string;
+    addressLine1?: string;
+  };
+  customerNote?: string;
+  createdAt?: string;
+};
+
 type CheckoutDisplayItem = ChiTietGioHang | BuyNowItem;
 
 function getAddressId(address: UserAddress) {
@@ -67,12 +86,7 @@ function getAddressId(address: UserAddress) {
 function formatAddress(address?: UserAddress | null) {
   if (!address) return '';
 
-  return [
-    address.addressLine,
-    address.ward,
-    address.district,
-    address.city,
-  ]
+  return [address.addressLine, address.ward, address.district, address.city]
     .filter(Boolean)
     .join(', ');
 }
@@ -144,9 +158,95 @@ function getVoucherDescription(voucher: UserVoucher) {
   return `Giảm ${formatPrice(voucher.value)}${minOrderText}`;
 }
 
+function formatVoucherDate(value?: string | null) {
+  if (!value) return 'Chưa cập nhật';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Chưa cập nhật';
+
+  return date.toLocaleDateString('vi-VN');
+}
+
+function getVoucherDetail(voucher: UserVoucher) {
+  if (voucher.detail?.trim()) return voucher.detail.trim();
+
+  return getVoucherDescription(voucher);
+}
+
+function getVoucherCondition(voucher: UserVoucher) {
+  if (voucher.terms?.trim()) return voucher.terms.trim();
+
+  if (voucher.minOrderValue && voucher.minOrderValue > 0) {
+    return `Đơn hàng từ ${formatPrice(voucher.minOrderValue)} trở lên.`;
+  }
+
+  return 'Áp dụng theo điều kiện của hệ thống.';
+}
+
+function getUserRemainingUses(voucher: UserVoucher) {
+  if (typeof voucher.userRemainingUses === 'number') {
+    return Math.max(0, voucher.userRemainingUses);
+  }
+
+  if (voucher.perUserLimit === null || voucher.perUserLimit === undefined) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Number(voucher.perUserLimit || 0) - Number(voucher.perUserUsed || 0)
+  );
+}
+
+function getVoucherUsageText(voucher: UserVoucher) {
+  const remaining = getUserRemainingUses(voucher);
+
+  if (remaining === null) {
+    return 'Không giới hạn lượt dùng cho tài khoản';
+  }
+
+  if (remaining <= 0) {
+    return 'Bạn đã dùng hết lượt voucher này';
+  }
+
+  return `Bạn còn ${remaining} lượt dùng`;
+}
+
+function readSelectedCartItemIds() {
+  try {
+    const raw = localStorage.getItem(SELECTED_CART_ITEM_IDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id));
+  } catch {
+    return [];
+  }
+}
+
+function readReorderCheckoutDraft(): ReorderCheckoutDraft | null {
+  try {
+    const raw = localStorage.getItem(REORDER_CHECKOUT_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+
+    if (!parsed || !Array.isArray(parsed.items) || parsed.items.length === 0) {
+      return null;
+    }
+
+    return parsed as ReorderCheckoutDraft;
+  } catch {
+    return null;
+  }
+}
+
 export default function CheckoutPage() {
   const location = useLocation();
-  const { items, clearCart, refreshCartPrices } = useCart();
+  const { items, clearCart, removeItems, refreshCartPrices } = useCart();
 
   const loggedIn = isLoggedIn();
   const storedUser = getStoredUser();
@@ -167,6 +267,9 @@ export default function CheckoutPage() {
   const [selectedVoucherCode, setSelectedVoucherCode] = useState('');
   const [voucherTouched, setVoucherTouched] = useState(false);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
+  const [expandedVoucherCode, setExpandedVoucherCode] = useState<string | null>(null);
+
+  const [selectedCartItemIds, setSelectedCartItemIds] = useState<number[]>([]);
 
   const [form, setForm] = useState<CheckoutForm>({
     hoTen: '',
@@ -176,11 +279,29 @@ export default function CheckoutPage() {
     ghiChu: '',
   });
 
+  const mode = useMemo<'cart' | 'buy-now' | 'reorder'>(() => {
+    const queryMode = new URLSearchParams(location.search).get('mode');
+
+    if (queryMode === 'buy-now') return 'buy-now';
+    if (queryMode === 'reorder') return 'reorder';
+
+    return 'cart';
+  }, [location.search]);
+
+  const useManualShippingForm = !loggedIn || mode === 'reorder';
+
+  useEffect(() => {
+    if (mode !== 'cart') {
+      setSelectedCartItemIds([]);
+      return;
+    }
+
+    setSelectedCartItemIds(readSelectedCartItemIds());
+  }, [mode]);
+
   useEffect(() => {
     const loadSavedAddresses = async () => {
-      if (!loggedIn) {
-        return;
-      }
+      if (!loggedIn) return;
 
       try {
         setAddressLoading(true);
@@ -222,11 +343,6 @@ export default function CheckoutPage() {
     loadVouchers();
   }, [loggedIn]);
 
-  const mode = useMemo(() => {
-    const queryMode = new URLSearchParams(location.search).get('mode');
-    return queryMode === 'buy-now' ? 'buy-now' : 'cart';
-  }, [location.search]);
-
   const buyNowItem = useMemo<BuyNowItem | null>(() => {
     if (mode !== 'buy-now' || typeof window === 'undefined') return null;
 
@@ -247,8 +363,32 @@ export default function CheckoutPage() {
     }
   }, [mode]);
 
+  const reorderDraft = useMemo<ReorderCheckoutDraft | null>(() => {
+    if (mode !== 'reorder' || typeof window === 'undefined') return null;
+    return readReorderCheckoutDraft();
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'reorder' || !reorderDraft) return;
+
+    setForm((prev) => ({
+      ...prev,
+      hoTen: reorderDraft.shippingAddress?.fullName || '',
+      sdt: reorderDraft.shippingAddress?.phone || '',
+      email: reorderDraft.shippingAddress?.email || storedUser?.email || '',
+      diaChi: reorderDraft.shippingAddress?.addressLine1 || '',
+      ghiChu: reorderDraft.customerNote || '',
+    }));
+  }, [mode, reorderDraft, storedUser?.email]);
+
   const checkoutItems: CheckoutDisplayItem[] =
-    mode === 'buy-now' ? (buyNowItem ? [buyNowItem] : []) : items;
+    mode === 'buy-now'
+      ? buyNowItem
+        ? [buyNowItem]
+        : []
+      : mode === 'reorder'
+        ? reorderDraft?.items || []
+        : items.filter((item) => selectedCartItemIds.includes(Number(item.id)));
 
   const selectedAddress = useMemo(() => {
     return addresses.find((address) => getAddressId(address) === selectedAddressId) || null;
@@ -335,16 +475,27 @@ export default function CheckoutPage() {
   const backHref =
     mode === 'buy-now' && buyNowItem?.productSlug
       ? `/san-pham/${buyNowItem.productSlug}`
-      : '/gio-hang';
+      : mode === 'reorder' && reorderDraft?.sourceOrderCode
+        ? `/don-hang/${reorderDraft.sourceOrderCode}`
+        : '/gio-hang';
 
   const backLabel =
-    mode === 'buy-now' ? 'Quay lại sản phẩm' : 'Quay lại giỏ hàng';
+    mode === 'buy-now'
+      ? 'Quay lại sản phẩm'
+      : mode === 'reorder'
+        ? 'Quay lại đơn hàng cũ'
+        : 'Quay lại giỏ hàng';
 
   const validateItems = () => {
     if (checkoutItems.length === 0) {
-      toast.error(
-        mode === 'buy-now' ? 'Không có sản phẩm mua ngay' : 'Giỏ hàng đang trống'
-      );
+      const message =
+        mode === 'buy-now'
+          ? 'Không có sản phẩm mua ngay'
+          : mode === 'reorder'
+            ? 'Không có dữ liệu mua lại đơn hàng'
+            : 'Giỏ hàng đang trống';
+
+      toast.error(message);
       return false;
     }
 
@@ -440,11 +591,11 @@ export default function CheckoutPage() {
   const validateForm = () => {
     if (!validateItems()) return false;
 
-    if (loggedIn) {
-      return validateLoggedInCheckout();
+    if (useManualShippingForm) {
+      return validateGuestCheckout();
     }
 
-    return validateGuestCheckout();
+    return validateLoggedInCheckout();
   };
 
   const handleSelectVoucher = (voucher: UserVoucher) => {
@@ -475,6 +626,15 @@ export default function CheckoutPage() {
     setSelectedVoucherCode('');
   };
 
+  const getPaidCartItemIds = () => {
+    const ids =
+      selectedCartItemIds.length > 0
+        ? selectedCartItemIds
+        : checkoutItems.map((item) => Number(item.id));
+
+    return ids.filter((id) => Number.isFinite(id));
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -493,21 +653,21 @@ export default function CheckoutPage() {
     try {
       setIsSubmitting(true);
 
-      const shippingFullName = loggedIn
-        ? getCustomerNameFromAddress(selectedAddress)
-        : form.hoTen.trim();
+      const shippingFullName = useManualShippingForm
+        ? form.hoTen.trim()
+        : getCustomerNameFromAddress(selectedAddress);
 
-      const shippingPhone = loggedIn
-        ? getCustomerPhoneFromAddress(selectedAddress)
-        : form.sdt.trim();
+      const shippingPhone = useManualShippingForm
+        ? form.sdt.trim()
+        : getCustomerPhoneFromAddress(selectedAddress);
 
-      const shippingEmail = loggedIn
-        ? storedUser?.email || ''
-        : form.email.trim();
+      const shippingEmail = useManualShippingForm
+        ? form.email.trim()
+        : storedUser?.email || '';
 
-      const shippingAddressText = loggedIn
-        ? formatAddress(selectedAddress)
-        : form.diaChi.trim();
+      const shippingAddressText = useManualShippingForm
+        ? form.diaChi.trim()
+        : formatAddress(selectedAddress);
 
       const payload: CreateOrderPayload & { shippingFee: number } = {
         items: checkoutItems.map((item) => ({
@@ -537,7 +697,7 @@ export default function CheckoutPage() {
           paymentType === 'PayOS'
             ? `${window.location.origin}/payment/cancel`
             : undefined,
-        finalize: paymentType === 'PayOS',
+        finalize: false,
         guestInfo: {
           fullName: shippingFullName,
           email: shippingEmail,
@@ -564,22 +724,89 @@ export default function CheckoutPage() {
         }
 
         if (payosOrderCode) {
-          localStorage.setItem('matewear_pending_payos_order', payosOrderCode);
+          localStorage.setItem(PENDING_PAYOS_ORDER_KEY, payosOrderCode);
         }
 
+        localStorage.setItem(PENDING_PAYOS_SOURCE_KEY, mode);
+
+        const pendingCheckoutItems = checkoutItems.map((item) => {
+          const productSlug =
+            'productSlug' in item && item.productSlug
+              ? item.productSlug
+              : 'sanPham' in item && item.sanPham && 'slug' in item.sanPham
+                ? String((item.sanPham as any).slug || '')
+                : '';
+
+          const image = item.hinhAnh || item.sanPham?.hinhAnh || '';
+
+          return {
+            id: String(item.id),
+            productId: item.productId,
+            productSlug,
+            variantId: item.variantId,
+            kichCo: item.kichCo,
+            soLuong: item.soLuong,
+            gia: item.gia,
+            mauSac: item.mauSac,
+            hinhAnh: image,
+            sanPham: {
+              id: item.sanPham.id,
+              ten: item.sanPham.ten,
+              hinhAnh: image,
+            },
+          };
+        });
+
+        localStorage.setItem(
+          PENDING_PAYOS_CHECKOUT_DRAFT_KEY,
+          JSON.stringify({
+            source: mode,
+            sourceOrderCode: reorderDraft?.sourceOrderCode || payosOrderCode || '',
+            items: pendingCheckoutItems,
+            shippingAddress: {
+              fullName: shippingFullName,
+              phone: shippingPhone,
+              email: shippingEmail,
+              addressLine1: shippingAddressText,
+            },
+            customerNote: form.ghiChu.trim(),
+            createdAt: new Date().toISOString(),
+          })
+        );
+
         if (mode === 'cart') {
-          clearCart();
+          localStorage.setItem(
+            SELECTED_CART_ITEM_IDS_KEY,
+            JSON.stringify(getPaidCartItemIds())
+          );
+        }
+
+        if (mode === 'buy-now' && buyNowItem?.productSlug) {
+          localStorage.setItem(PENDING_PAYOS_BUY_NOW_SLUG_KEY, buyNowItem.productSlug);
+        } else {
+          localStorage.removeItem(PENDING_PAYOS_BUY_NOW_SLUG_KEY);
         }
 
         localStorage.removeItem(BUY_NOW_STORAGE_KEY);
 
-        toast.success('Đã tạo đơn hàng, đang chuyển đến PayOS...');
+        toast.success('Đã tạo yêu cầu thanh toán, đang chuyển đến PayOS...');
         window.location.href = checkoutUrl;
         return;
       }
 
       if (mode === 'cart') {
-        clearCart();
+        const paidCartItemIds = getPaidCartItemIds();
+
+        if (paidCartItemIds.length > 0) {
+          removeItems(paidCartItemIds);
+          localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+        } else {
+          clearCart();
+        }
+      }
+
+      if (mode === 'reorder') {
+        localStorage.removeItem(REORDER_CHECKOUT_KEY);
       }
 
       localStorage.removeItem(BUY_NOW_STORAGE_KEY);
@@ -615,8 +842,9 @@ export default function CheckoutPage() {
             <Button asChild>
               <Link to="/">Về trang chủ</Link>
             </Button>
+
             <Button variant="outline" asChild>
-              <Link to={`/tra-cuu-don-hang/${orderCode}`}>Xem đơn hàng</Link>
+              <Link to={`/don-hang/${orderCode}`}>Xem đơn hàng</Link>
             </Button>
           </div>
         </div>
@@ -625,15 +853,41 @@ export default function CheckoutPage() {
   }
 
   if (checkoutItems.length === 0) {
+    const emptyTitle =
+      mode === 'buy-now'
+        ? 'Không có sản phẩm mua ngay'
+        : mode === 'reorder'
+          ? 'Không có dữ liệu mua lại đơn hàng'
+          : 'Không có sản phẩm nào được chọn để thanh toán';
+
+    const emptyHref =
+      mode === 'buy-now'
+        ? '/san-pham'
+        : mode === 'reorder'
+          ? '/don-hang'
+          : '/gio-hang';
+
+    const emptyLabel =
+      mode === 'buy-now'
+        ? 'Mua sắm ngay'
+        : mode === 'reorder'
+          ? 'Quay lại đơn hàng của tôi'
+          : 'Quay lại giỏ hàng';
+
     return (
       <MainLayout>
         <div className="container mx-auto px-4 py-20 text-center">
-          <p className="mb-4 text-lg font-medium">
-            {mode === 'buy-now' ? 'Không có sản phẩm mua ngay' : 'Giỏ hàng trống'}
-          </p>
-          <Button asChild>
-            <Link to="/san-pham">Mua sắm ngay</Link>
-          </Button>
+          <p className="mb-4 text-lg font-medium">{emptyTitle}</p>
+
+          <div className="flex justify-center gap-3">
+            <Button asChild>
+              <Link to={emptyHref}>{emptyLabel}</Link>
+            </Button>
+
+            <Button variant="outline" asChild>
+              <Link to="/san-pham">Tiếp tục mua sắm</Link>
+            </Button>
+          </div>
         </div>
       </MainLayout>
     );
@@ -659,13 +913,15 @@ export default function CheckoutPage() {
                 <div>
                   <h2 className="font-semibold">Thông tin giao hàng</h2>
                   <p className="text-xs text-muted-foreground">
-                    {loggedIn
-                      ? 'Chọn địa chỉ đã lưu trong tài khoản của bạn.'
-                      : 'Nhập thông tin giao hàng cho đơn hàng khách.'}
+                    {mode === 'reorder'
+                      ? 'Thông tin nhận hàng được lấy từ đơn cũ, bạn có thể kiểm tra lại trước khi đặt.'
+                      : loggedIn
+                        ? 'Chọn địa chỉ đã lưu trong tài khoản của bạn.'
+                        : 'Nhập thông tin giao hàng cho đơn hàng khách.'}
                   </p>
                 </div>
 
-                {loggedIn ? (
+                {!useManualShippingForm && loggedIn ? (
                   <Button variant="outline" size="sm" asChild>
                     <Link to="/dia-chi">
                       <Plus className="mr-2 h-4 w-4" />
@@ -675,7 +931,7 @@ export default function CheckoutPage() {
                 ) : null}
               </div>
 
-              {loggedIn ? (
+              {!useManualShippingForm ? (
                 <div className="space-y-3">
                   {addressLoading ? (
                     <p className="text-sm text-muted-foreground">
@@ -688,6 +944,7 @@ export default function CheckoutPage() {
                       <p className="mb-4 text-sm text-muted-foreground">
                         Thêm địa chỉ để tiếp tục đặt hàng.
                       </p>
+
                       <Button asChild>
                         <Link to="/dia-chi">
                           <Plus className="mr-2 h-4 w-4" />
@@ -854,6 +1111,9 @@ export default function CheckoutPage() {
                       <p className="mt-1 text-xs text-emerald-700">
                         Đã giảm {formatPrice(voucherDiscount)}
                       </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {getVoucherUsageText(selectedVoucher)}
+                      </p>
                     </div>
 
                     <button
@@ -885,6 +1145,7 @@ export default function CheckoutPage() {
                 <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-3 hover:bg-secondary/50">
                   <div className="flex items-center gap-3">
                     <RadioGroupItem value="standard" />
+
                     <div>
                       <p className="text-sm font-medium">Giao hàng tiêu chuẩn</p>
                       <p className="text-xs text-muted-foreground">
@@ -892,6 +1153,7 @@ export default function CheckoutPage() {
                       </p>
                     </div>
                   </div>
+
                   <span className="text-sm font-medium">
                     {subtotal >= 500000 ? 'Miễn phí' : '30.000₫'}
                   </span>
@@ -900,6 +1162,7 @@ export default function CheckoutPage() {
                 <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-3 hover:bg-secondary/50">
                   <div className="flex items-center gap-3">
                     <RadioGroupItem value="express" />
+
                     <div>
                       <p className="text-sm font-medium">Giao hàng nhanh</p>
                       <p className="text-xs text-muted-foreground">
@@ -907,6 +1170,7 @@ export default function CheckoutPage() {
                       </p>
                     </div>
                   </div>
+
                   <span className="text-sm font-medium">50.000₫</span>
                 </label>
               </RadioGroup>
@@ -923,6 +1187,7 @@ export default function CheckoutPage() {
                 <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-3 hover:bg-secondary/50">
                   <div className="flex items-center gap-3">
                     <RadioGroupItem value="COD" />
+
                     <div>
                       <p className="text-sm font-medium">Thanh toán khi nhận hàng</p>
                       <p className="text-xs text-muted-foreground">
@@ -930,12 +1195,14 @@ export default function CheckoutPage() {
                       </p>
                     </div>
                   </div>
+
                   <span className="text-sm font-medium">COD</span>
                 </label>
 
                 <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-3 hover:bg-secondary/50">
                   <div className="flex items-center gap-3">
                     <RadioGroupItem value="PayOS" />
+
                     <div>
                       <p className="text-sm font-medium">Thanh toán online qua PayOS</p>
                       <p className="text-xs text-muted-foreground">
@@ -943,6 +1210,7 @@ export default function CheckoutPage() {
                       </p>
                     </div>
                   </div>
+
                   <span className="text-sm font-medium">PayOS</span>
                 </label>
               </RadioGroup>
@@ -963,13 +1231,16 @@ export default function CheckoutPage() {
                       alt={item.sanPham.ten || 'Sản phẩm'}
                       className="h-14 w-14 rounded-lg bg-secondary object-cover"
                     />
+
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-1 text-xs font-medium">
                         {item.sanPham.ten}
                       </p>
+
                       <p className="text-[11px] text-muted-foreground">
                         {item.mauSac} / {item.kichCo} x{item.soLuong}
                       </p>
+
                       <p className="text-xs font-bold">
                         {formatPrice(item.gia * item.soLuong)}
                       </p>
@@ -1008,7 +1279,7 @@ export default function CheckoutPage() {
                 type="submit"
                 size="lg"
                 className="w-full"
-                disabled={isSubmitting || addressLoading}
+                disabled={isSubmitting || (!useManualShippingForm && addressLoading)}
               >
                 {isSubmitting
                   ? paymentType === 'PayOS'
@@ -1028,6 +1299,7 @@ export default function CheckoutPage() {
           <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-bold">Chọn địa chỉ giao hàng</h2>
+
               <button
                 type="button"
                 onClick={() => setAddressModalOpen(false)}
@@ -1100,10 +1372,19 @@ export default function CheckoutPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold">Chọn voucher</h2>
+              <div>
+                <h2 className="text-xl font-bold">Chọn voucher</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Chọn voucher phù hợp với giá trị đơn hàng hiện tại.
+                </p>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setVoucherModalOpen(false)}
+                onClick={() => {
+                  setVoucherModalOpen(false);
+                  setExpandedVoucherCode(null);
+                }}
                 className="rounded-full p-2 hover:bg-slate-100"
               >
                 <X className="h-5 w-5" />
@@ -1114,43 +1395,45 @@ export default function CheckoutPage() {
               {vouchers.map((voucher) => {
                 const usable = isVoucherUsable(voucher, subtotal);
                 const selected = selectedVoucherCode === voucher.code;
-                const discount = calculateVoucherDiscount(voucher, subtotal);
                 const needMore = getNeedMoreAmount(voucher, subtotal);
+                const expanded = expandedVoucherCode === voucher.code;
 
                 return (
-                  <button
-                    key={voucher._id}
-                    type="button"
-                    onClick={() => {
-                      const applied = handleSelectVoucher(voucher);
-
-                      if (applied) {
-                        setVoucherModalOpen(false);
-                      }
-                    }}
+                  <div
+                    key={voucher._id || voucher.code}
                     className={`w-full rounded-xl border p-4 text-left transition ${selected
                       ? 'border-blue-500 bg-blue-50'
                       : usable
-                        ? 'border-border hover:border-blue-300 hover:bg-blue-50/40'
-                        : 'border-dashed border-slate-300 bg-slate-50 opacity-80'
+                        ? 'border-border hover:bg-secondary/50'
+                        : 'border-border bg-slate-50 opacity-80'
                       }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ok = handleSelectVoucher(voucher);
+                          if (ok) {
+                            setVoucherModalOpen(false);
+                            setExpandedVoucherCode(null);
+                          }
+                        }}
+                        className="min-w-0 flex-1 text-left"
+                      >
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-md bg-blue-600 px-2 py-1 text-xs font-bold text-white">
                             {voucher.code}
                           </span>
 
-                          {selected ? (
-                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-                              Đang áp dụng
-                            </span>
-                          ) : null}
-
                           {bestVoucher?.code === voucher.code ? (
                             <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                               Tốt nhất
+                            </span>
+                          ) : null}
+
+                          {selected ? (
+                            <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                              Đang áp dụng
                             </span>
                           ) : null}
                         </div>
@@ -1160,49 +1443,140 @@ export default function CheckoutPage() {
                         </p>
 
                         {usable ? (
-                          <p className="mt-1 text-xs text-emerald-700">
-                            Giảm {formatPrice(discount)}
-                          </p>
+                          <div className="mt-1 space-y-1">
+                            <p className="text-xs text-emerald-700">
+                              Giảm {formatPrice(calculateVoucherDiscount(voucher, subtotal))}
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {getVoucherUsageText(voucher)}
+                            </p>
+                          </div>
                         ) : needMore > 0 ? (
-                          <p className="mt-1 text-xs text-amber-700">
-                            Cần đặt thêm {formatPrice(needMore)} để sử dụng voucher này
-                          </p>
-                        ) : voucher.perUserExceeded ? (
-                          <p className="mt-1 text-xs text-slate-500">
-                            Bạn đã dùng hết lượt cho voucher này
-                          </p>
+                          <div className="mt-1 space-y-1">
+                            <p className="text-xs text-amber-700">
+                              Cần mua thêm {formatPrice(needMore)} để sử dụng.
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {getVoucherUsageText(voucher)}
+                            </p>
+                          </div>
                         ) : voucher.exhausted ? (
-                          <p className="mt-1 text-xs text-slate-500">
-                            Voucher đã hết lượt sử dụng
-                          </p>
+                          <div className="mt-1 space-y-1">
+                            <p className="text-xs text-red-600">
+                              Voucher đã hết lượt sử dụng.
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {getVoucherUsageText(voucher)}
+                            </p>
+                          </div>
+                        ) : voucher.perUserExceeded ? (
+                          <div className="mt-1 space-y-1">
+                            <p className="text-xs text-red-600">
+                              Bạn đã dùng hết lượt cho voucher này.
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {getVoucherUsageText(voucher)}
+                            </p>
+                          </div>
                         ) : (
-                          <p className="mt-1 text-xs text-slate-500">
-                            Voucher chưa đủ điều kiện áp dụng
-                          </p>
+                          <div className="mt-1 space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              Voucher chưa đủ điều kiện áp dụng.
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              {getVoucherUsageText(voucher)}
+                            </p>
+                          </div>
                         )}
-                      </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExpandedVoucherCode(expanded ? null : voucher.code);
+                        }}
+                        className="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-white"
+                      >
+                        {expanded ? 'Ẩn chi tiết' : 'Chi tiết'}
+                      </button>
                     </div>
-                  </button>
+
+                    {expanded ? (
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                        <div className="space-y-3">
+                          <div>
+                            <p className="font-semibold text-slate-900">Chi tiết ưu đãi</p>
+                            <p className="mt-1 leading-6 text-slate-600">
+                              {getVoucherDetail(voucher)}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="font-semibold text-slate-900">Điều kiện áp dụng</p>
+                            <p className="mt-1 leading-6 text-slate-600">
+                              {getVoucherCondition(voucher)}
+                            </p>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <p className="font-semibold text-slate-900">Lượt sử dụng</p>
+                              <p
+                                className={`mt-1 ${getUserRemainingUses(voucher) === 0
+                                  ? 'text-red-600'
+                                  : 'text-emerald-700'
+                                  }`}
+                              >
+                                {getVoucherUsageText(voucher)}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="font-semibold text-slate-900">Hạn sử dụng</p>
+                              <p className="mt-1 text-slate-600">
+                                {formatVoucherDate(voucher.startAt)} - {formatVoucherDate(voucher.endAt)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <p className="text-xs leading-5 text-slate-500">
+                            Mã giảm giá không có giá trị quy đổi ra tiền mặt.
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
 
-            <div className="mt-5 flex justify-between gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  handleRemoveVoucher();
-                  setVoucherModalOpen(false);
-                }}
-              >
-                Bỏ voucher
-              </Button>
+            <div className="mt-5 flex justify-end gap-3">
+              {selectedVoucher ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    handleRemoveVoucher();
+                    setVoucherModalOpen(false);
+                    setExpandedVoucherCode(null);
+                  }}
+                >
+                  Bỏ áp dụng
+                </Button>
+              ) : null}
 
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setVoucherModalOpen(false)}
+                onClick={() => {
+                  setVoucherModalOpen(false);
+                  setExpandedVoucherCode(null);
+                }}
               >
                 Đóng
               </Button>

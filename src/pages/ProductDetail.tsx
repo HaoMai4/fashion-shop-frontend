@@ -29,6 +29,8 @@ import { formatPrice, getDiscountPercent } from '@/utils/format';
 import { toast } from 'sonner';
 
 const BUY_NOW_STORAGE_KEY = 'matewear_buy_now';
+const RECENTLY_VIEWED_PRODUCTS_KEY = 'matewear_recently_viewed_products';
+const RECENTLY_VIEWED_UPDATED_EVENT = 'stylehub_recently_viewed_updated';
 
 type RatingStarsProps = {
   value?: number;
@@ -66,6 +68,29 @@ function RatingStars({ value = 0, size = 'md', className = '' }: RatingStarsProp
       })}
     </div>
   );
+}
+
+function saveRecentlyViewedProduct(product: SanPham) {
+  if (!product?.id) return;
+
+  try {
+    const raw = localStorage.getItem(RECENTLY_VIEWED_PRODUCTS_KEY);
+    const currentItems: SanPham[] = raw ? JSON.parse(raw) : [];
+
+    const nextItems = [
+      product,
+      ...currentItems.filter((item) => String(item.id) !== String(product.id)),
+    ].slice(0, 20);
+
+    localStorage.setItem(
+      RECENTLY_VIEWED_PRODUCTS_KEY,
+      JSON.stringify(nextItems)
+    );
+
+    window.dispatchEvent(new Event(RECENTLY_VIEWED_UPDATED_EVENT));
+  } catch (error) {
+    console.warn('Save recently viewed product failed:', error);
+  }
 }
 
 export default function ProductDetail() {
@@ -135,6 +160,10 @@ export default function ProductDetail() {
         setSelectedSize(firstSize);
         setSelectedImage(firstImages[0] || '/placeholder.svg');
         setQuantity(1);
+
+        if (isLoggedIn()) {
+          saveRecentlyViewedProduct(p);
+        }
       } catch (err) {
         console.error('Load product detail failed:', err);
         if (isMounted) {

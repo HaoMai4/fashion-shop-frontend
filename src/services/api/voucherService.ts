@@ -15,6 +15,7 @@ export interface UserVoucher {
   usedCount?: number;
   perUserLimit?: number | null;
   perUserUsed?: number;
+  userRemainingUses?: number | null;
   exhausted?: boolean;
   perUserExceeded?: boolean;
   usable?: boolean;

@@ -70,6 +70,10 @@ const ORDER_STATUS_MAP: Record<
   string,
   { label: string; className: string }
 > = {
+  pending_payment: {
+    label: 'Chờ thanh toán',
+    className: 'bg-amber-100 text-amber-700',
+  },
   pending: {
     label: 'Chờ xác nhận',
     className: 'bg-secondary text-foreground',
@@ -234,6 +238,18 @@ export default function TraCuuDonHangPage() {
     .filter(Boolean)
     .join(', ');
 
+  const isPayOSOrder = order.paymentMethod?.type === 'PayOS';
+  const isPaymentCancelled = order.paymentMethod?.status === 'cancelled';
+  const isPaymentPending = order.paymentMethod?.status === 'pending';
+  const isOrderCancelled = order.orderStatus === 'cancelled';
+  const isPendingPayment = order.orderStatus === 'pending_payment';
+
+  const isCancelledPayOSOrder =
+    isPayOSOrder && isPaymentCancelled && isOrderCancelled;
+
+  const isPendingPayOSOrder =
+    isPayOSOrder && isPaymentPending && isPendingPayment;
+
   const handleCopyOrderCode = async () => {
     try {
       await navigator.clipboard.writeText(order.orderCode);
@@ -266,7 +282,9 @@ export default function TraCuuDonHangPage() {
               <div className="space-y-1 text-sm text-muted-foreground">
                 <p>
                   Mã đơn hàng:{' '}
-                  <span className="font-semibold text-foreground">{order.orderCode}</span>
+                  <span className="font-semibold text-foreground">
+                    {order.orderCode}
+                  </span>
                 </p>
                 <p>Ngày đặt: {new Date(order.createdAt).toLocaleString('vi-VN')}</p>
               </div>
@@ -362,15 +380,56 @@ export default function TraCuuDonHangPage() {
               </div>
             )}
 
-            <div className="rounded-xl border border-border p-5">
+            <div
+              className={`rounded-xl border p-5 ${
+                isCancelledPayOSOrder
+                  ? 'border-red-200 bg-red-50'
+                  : isPendingPayOSOrder
+                    ? 'border-amber-200 bg-amber-50'
+                    : 'border-border'
+              }`}
+            >
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-5 w-5 text-success" />
+                <CheckCircle2
+                  className={`mt-0.5 h-5 w-5 ${
+                    isCancelledPayOSOrder
+                      ? 'text-red-600'
+                      : isPendingPayOSOrder
+                        ? 'text-amber-600'
+                        : 'text-success'
+                  }`}
+                />
+
                 <div>
-                  <h2 className="font-semibold">Đơn hàng đã được ghi nhận</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Cửa hàng đã nhận được thông tin đặt hàng của bạn. Bạn có thể dùng
-                    mã đơn hàng để tra cứu lại đơn bất cứ lúc nào.
-                  </p>
+                  {isCancelledPayOSOrder ? (
+                    <>
+                      <h2 className="font-semibold text-red-700">
+                        Thanh toán PayOS đã bị hủy
+                      </h2>
+                      <p className="mt-1 text-sm text-red-700">
+                        Đơn hàng này đã bị hủy do thanh toán PayOS chưa hoàn tất.
+                        Cửa hàng sẽ không xử lý đơn này.
+                      </p>
+                    </>
+                  ) : isPendingPayOSOrder ? (
+                    <>
+                      <h2 className="font-semibold text-amber-700">
+                        Đơn hàng đang chờ thanh toán
+                      </h2>
+                      <p className="mt-1 text-sm text-amber-700">
+                        Bạn cần hoàn tất thanh toán PayOS trước khi cửa hàng xác nhận
+                        và xử lý đơn hàng.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="font-semibold">Đơn hàng đã được ghi nhận</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Cửa hàng đã nhận được thông tin đặt hàng của bạn. Bạn có thể
+                        dùng mã đơn hàng để tra cứu lại đơn bất cứ lúc nào.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

@@ -44,6 +44,8 @@ export type PaymentStatusResponse = {
   paymentStatus: "pending" | "paid" | "failed" | "cancelled";
   totalAmount: number;
   createdAt?: string;
+  expiresAt?: string | null;
+  invoiceUrl?: string | null;
   paidAt?: string | null;
   cancelledAt?: string | null;
 };
@@ -69,6 +71,7 @@ export const orderService = {
     status?: string;
     sortBy?: string;
     sortOrder?: "asc" | "desc";
+    all?: boolean;
   }) {
     const qs = new URLSearchParams();
 
@@ -77,6 +80,7 @@ export const orderService = {
     if (params?.status) qs.set("status", params.status);
     if (params?.sortBy) qs.set("sortBy", params.sortBy);
     if (params?.sortOrder) qs.set("sortOrder", params.sortOrder);
+    if (params?.all) qs.set("all", "true");
 
     const queryString = qs.toString();
 

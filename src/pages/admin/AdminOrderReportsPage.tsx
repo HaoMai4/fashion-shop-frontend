@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, FileText, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle2, FileText, RefreshCw, X, XCircle } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -139,7 +139,10 @@ function getStatusBadgeInfo(status?: string) {
     rejected: { label: 'Từ chối', variant: 'destructive' },
   };
 
-  return map[normalized] || { label: normalized || 'Không rõ', variant: 'outline' as const };
+  return map[normalized] || {
+    label: normalized || 'Không rõ',
+    variant: 'outline' as const,
+  };
 }
 
 function getOrderObject(report: OrderReportRecord): OrderInfo | null {
@@ -230,6 +233,7 @@ function getCustomerEmail(report: OrderReportRecord) {
 function getAddressText(report: OrderReportRecord) {
   const order = getOrderObject(report);
   const address = order?.shippingAddress;
+
   if (!address) return 'Chưa có địa chỉ';
 
   const parts = [
@@ -255,7 +259,12 @@ function getPaymentType(report: OrderReportRecord) {
 
   if (!payment) return 'Chưa rõ';
   if (typeof payment === 'string') return payment;
+
   return payment.type || payment.method || 'Chưa rõ';
+}
+
+function getReportId(report?: OrderReportRecord | null) {
+  return report?._id || report?.id || '';
 }
 
 export default function AdminOrderReportsPage() {
@@ -267,6 +276,10 @@ export default function AdminOrderReportsPage() {
   const [selectedReport, setSelectedReport] = useState<OrderReportRecord | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<OrderReportRecord | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const currentSelectedId = useMemo(
     () => selectedReport?._id || selectedReport?.id || null,
@@ -290,7 +303,7 @@ export default function AdminOrderReportsPage() {
 
       if (currentSelectedId) {
         const found = list.find((item) => (item._id || item.id) === currentSelectedId);
-        if (found) setSelectedReport(found);
+        setSelectedReport(found || null);
       }
     } catch (error: any) {
       console.error('getAdminOrderReports error:', error);
@@ -324,18 +337,47 @@ export default function AdminOrderReportsPage() {
     }
   };
 
-  const handleReject = async (reportId: string) => {
-    const confirmed = window.confirm(
-      'Bạn có chắc muốn từ chối yêu cầu hủy đơn này không? Đơn hàng sẽ quay lại trạng thái trước khi yêu cầu hủy.'
-    );
+  const openRejectModal = (report: OrderReportRecord) => {
+    setRejectTarget(report);
+    setRejectReason('');
+    setRejectModalOpen(true);
+  };
 
-    if (!confirmed) return;
+  const closeRejectModal = () => {
+    if (rejectingId) return;
+
+    setRejectModalOpen(false);
+    setRejectTarget(null);
+    setRejectReason('');
+  };
+
+  const handleSubmitReject = async () => {
+    const reportId = getReportId(rejectTarget);
+    const trimmedReason = rejectReason.trim();
+
+    if (!reportId) {
+      toast.error('Không tìm thấy yêu cầu hủy đơn');
+      return;
+    }
+
+    if (!trimmedReason) {
+      toast.error('Vui lòng nhập lý do từ chối');
+      return;
+    }
 
     setRejectingId(reportId);
 
     try {
-      await orderService.rejectOrderReport(reportId);
+      await orderService.rejectOrderReport(reportId, {
+        reason: trimmedReason,
+      });
+
       toast.success('Đã từ chối yêu cầu hủy đơn');
+
+      setRejectModalOpen(false);
+      setRejectTarget(null);
+      setRejectReason('');
+
       await fetchReports(page, filterStatus);
     } catch (error: any) {
       console.error('rejectOrderReport error:', error);
@@ -360,7 +402,7 @@ export default function AdminOrderReportsPage() {
           <div>
             <h1 className="text-2xl font-bold">Yêu cầu hủy đơn</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Các yêu cầu hủy được gắn với đơn hàng gốc. Duyệt yêu cầu sẽ chuyển đơn tương ứng sang trạng thái Đã hủy, còn từ chối sẽ đưa đơn về trạng thái trước đó.
+              Các yêu cầu hủy được gắn với đơn hàng gốc. Duyệt yêu cầu sẽ chuyển đơn sang trạng thái Đã hủy, còn từ chối sẽ đưa đơn về trạng thái trước đó và lưu lý do phản hồi cho khách.
             </p>
           </div>
 
@@ -384,11 +426,10 @@ export default function AdminOrderReportsPage() {
                 setPage(1);
                 setFilterStatus(tab.value);
               }}
-              className={`rounded-xl border p-3 text-left transition ${
-                filterStatus === tab.value
+              className={`rounded-xl border p-3 text-left transition ${filterStatus === tab.value
                   ? 'border-primary bg-primary/5'
                   : 'border-border bg-background hover:bg-secondary/50'
-              }`}
+                }`}
             >
               <p className="text-sm font-medium">{tab.label}</p>
             </button>
@@ -430,7 +471,7 @@ export default function AdminOrderReportsPage() {
 
                     <TableBody>
                       {reports.map((report) => {
-                        const reportId = report._id || report.id || '';
+                        const reportId = getReportId(report);
                         const statusInfo = getStatusBadgeInfo(report.status || report.trangThai);
                         const pending = isReportPending(report);
                         const disabled =
@@ -453,22 +494,27 @@ export default function AdminOrderReportsPage() {
                               </div>
                             </TableCell>
 
-                            <TableCell className="max-w-[260px]">
-                              <p className="line-clamp-2 text-sm text-muted-foreground">
+                            <TableCell className="max-w-[240px]">
+                              <p className="line-clamp-2 text-sm">
                                 {getReportReason(report)}
                               </p>
                             </TableCell>
 
                             <TableCell>
-                              {report.createdAt ? formatDate(report.createdAt) : 'Chưa có ngày'}
+                              <p className="text-sm">
+                                {report.createdAt ? formatDate(report.createdAt) : 'Chưa rõ'}
+                              </p>
                             </TableCell>
 
                             <TableCell>
-                              <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                              <Badge variant={statusInfo.variant}>
+                                {statusInfo.label}
+                              </Badge>
                             </TableCell>
 
                             <TableCell className="text-center">
                               <Button
+                                type="button"
                                 variant="outline"
                                 size="sm"
                                 onClick={() => setSelectedReport(report)}
@@ -477,30 +523,31 @@ export default function AdminOrderReportsPage() {
                               </Button>
                             </TableCell>
 
-                            <TableCell className="text-center">
+                            <TableCell>
                               {pending ? (
                                 <div className="flex justify-center gap-2">
                                   <Button
                                     size="sm"
                                     disabled={disabled}
-                                    onClick={() => handleApprove(reportId)}
+                                    onClick={() => reportId && handleApprove(reportId)}
                                   >
-                                    {approvingId === reportId ? 'Đang duyệt...' : 'Duyệt'}
+                                    {approvingId === reportId ? 'Đang duyệt' : 'Duyệt'}
                                   </Button>
 
                                   <Button
-                                    size="sm"
+                                    type="button"
                                     variant="outline"
+                                    size="sm"
                                     disabled={disabled}
-                                    onClick={() => handleReject(reportId)}
+                                    onClick={() => openRejectModal(report)}
                                   >
-                                    {rejectingId === reportId ? 'Đang từ chối...' : 'Từ chối'}
+                                    {rejectingId === reportId ? 'Đang từ chối' : 'Từ chối'}
                                   </Button>
                                 </div>
                               ) : (
-                                <span className="text-xs text-muted-foreground">
+                                <p className="text-center text-xs text-muted-foreground">
                                   Đã xử lý
-                                </span>
+                                </p>
                               )}
                             </TableCell>
                           </TableRow>
@@ -509,26 +556,28 @@ export default function AdminOrderReportsPage() {
                     </TableBody>
                   </Table>
 
-                  <div className="mt-4 flex items-center justify-between">
+                  <div className="mt-4 flex items-center justify-between gap-3">
                     <p className="text-sm text-muted-foreground">
                       Trang {page} / {pages}
                     </p>
 
                     <div className="flex gap-2">
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         disabled={page <= 1}
-                        onClick={() => setPage((prev) => prev - 1)}
+                        onClick={() => setPage((current) => Math.max(1, current - 1))}
                       >
                         Trước
                       </Button>
 
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         disabled={page >= pages}
-                        onClick={() => setPage((prev) => prev + 1)}
+                        onClick={() => setPage((current) => Math.min(pages, current + 1))}
                       >
                         Sau
                       </Button>
@@ -539,41 +588,41 @@ export default function AdminOrderReportsPage() {
             </CardContent>
           </Card>
 
-          <Card className="h-fit self-start xl:sticky xl:top-24">
-            <CardHeader className="pb-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle className="text-base leading-tight">Chi tiết yêu cầu</CardTitle>
-
-                {selectedReport ? (
-                  <Badge variant={getStatusBadgeInfo(selectedReport.status || selectedReport.trangThai).variant}>
-                    {getStatusBadgeInfo(selectedReport.status || selectedReport.trangThai).label}
-                  </Badge>
-                ) : null}
-              </div>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Chi tiết yêu cầu</CardTitle>
             </CardHeader>
 
             <CardContent>
               {!selectedReport ? (
-                <div className="py-16 text-center text-sm text-muted-foreground">
-                  Chọn một yêu cầu để xem chi tiết
+                <div className="py-12 text-center">
+                  <FileText className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">
+                    Chọn một yêu cầu để xem chi tiết
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs text-muted-foreground">Mã đơn hàng</p>
+                      <p className="text-xs text-muted-foreground">Mã đơn</p>
                       <p className="font-semibold">{getOrderCode(selectedReport)}</p>
                     </div>
 
-                    <div>
-                      <p className="text-xs text-muted-foreground">Ngày gửi yêu cầu</p>
-                      <p className="font-semibold">
-                        {selectedReport.createdAt
-                          ? formatDate(selectedReport.createdAt)
-                          : 'Chưa có ngày'}
-                      </p>
-                    </div>
+                    <Badge
+                      variant={
+                        getStatusBadgeInfo(selectedReport.status || selectedReport.trangThai)
+                          .variant
+                      }
+                    >
+                      {
+                        getStatusBadgeInfo(selectedReport.status || selectedReport.trangThai)
+                          .label
+                      }
+                    </Badge>
+                  </div>
 
+                  <div className="grid gap-3 text-sm">
                     <div>
                       <p className="text-xs text-muted-foreground">Khách hàng</p>
                       <p className="font-medium">{getCustomerName(selectedReport)}</p>
@@ -586,7 +635,9 @@ export default function AdminOrderReportsPage() {
 
                     <div>
                       <p className="text-xs text-muted-foreground">Email</p>
-                      <p className="font-medium break-all">{getCustomerEmail(selectedReport)}</p>
+                      <p className="break-all font-medium">
+                        {getCustomerEmail(selectedReport)}
+                      </p>
                     </div>
 
                     <div>
@@ -601,7 +652,9 @@ export default function AdminOrderReportsPage() {
 
                     <div>
                       <p className="text-xs text-muted-foreground">Tổng tiền đơn hàng</p>
-                      <p className="font-semibold">{formatPrice(getOrderTotal(selectedReport))}</p>
+                      <p className="font-semibold">
+                        {formatPrice(getOrderTotal(selectedReport))}
+                      </p>
                     </div>
                   </div>
 
@@ -611,9 +664,11 @@ export default function AdminOrderReportsPage() {
                   </div>
 
                   {selectedReport.rejectReason ? (
-                    <div className="rounded-lg border border-border p-4">
-                      <p className="mb-2 text-xs text-muted-foreground">Lý do từ chối</p>
-                      <p className="font-medium">{selectedReport.rejectReason}</p>
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                      <p className="mb-2 text-xs text-red-700/80">Lý do từ chối</p>
+                      <p className="font-medium text-red-800">
+                        {selectedReport.rejectReason}
+                      </p>
                     </div>
                   ) : null}
 
@@ -622,17 +677,17 @@ export default function AdminOrderReportsPage() {
                       <Button
                         className="w-full gap-2"
                         disabled={
-                          approvingId === (selectedReport._id || selectedReport.id || '') ||
-                          rejectingId === (selectedReport._id || selectedReport.id || '')
+                          approvingId === getReportId(selectedReport) ||
+                          rejectingId === getReportId(selectedReport)
                         }
                         onClick={() => {
-                          const reportId = selectedReport._id || selectedReport.id || '';
+                          const reportId = getReportId(selectedReport);
                           if (reportId) handleApprove(reportId);
                         }}
                       >
                         <CheckCircle2 className="h-4 w-4" />
-                        {approvingId === (selectedReport._id || selectedReport.id || '')
-                          ? 'Đang duyệt...'
+                        {approvingId === getReportId(selectedReport)
+                          ? 'Đang duyệt'
                           : 'Duyệt hủy'}
                       </Button>
 
@@ -641,16 +696,13 @@ export default function AdminOrderReportsPage() {
                         variant="outline"
                         className="w-full gap-2"
                         disabled={
-                          approvingId === (selectedReport._id || selectedReport.id || '') ||
-                          rejectingId === (selectedReport._id || selectedReport.id || '')
+                          approvingId === getReportId(selectedReport) ||
+                          rejectingId === getReportId(selectedReport)
                         }
-                        onClick={() => {
-                          const reportId = selectedReport._id || selectedReport.id || '';
-                          if (reportId) handleReject(reportId);
-                        }}
+                        onClick={() => openRejectModal(selectedReport)}
                       >
                         <XCircle className="h-4 w-4" />
-                        {rejectingId === (selectedReport._id || selectedReport.id || '')
+                        {rejectingId === getReportId(selectedReport)
                           ? 'Đang từ chối...'
                           : 'Từ chối'}
                       </Button>
@@ -666,6 +718,85 @@ export default function AdminOrderReportsPage() {
           </Card>
         </div>
       </div>
+
+      {rejectModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Từ chối yêu cầu hủy đơn</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Nhập lý do từ chối để khách hàng xem được trong chi tiết đơn hàng.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeRejectModal}
+                className="rounded-full p-2 text-muted-foreground hover:bg-slate-100 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!!rejectingId}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-border bg-secondary/30 p-4 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Mã đơn</span>
+                <span className="font-semibold">
+                  {rejectTarget ? getOrderCode(rejectTarget) : 'Chưa rõ'}
+                </span>
+              </div>
+
+              <div className="mt-3">
+                <p className="text-muted-foreground">Lý do khách gửi</p>
+                <p className="mt-1 font-medium">
+                  {rejectTarget ? getReportReason(rejectTarget) : 'Không có lý do'}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Lý do từ chối <span className="text-destructive">*</span>
+              </label>
+
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={5}
+                placeholder="Ví dụ: Đơn hàng đã được đóng gói và bàn giao cho đơn vị vận chuyển nên không thể hủy ở thời điểm này."
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                disabled={!!rejectingId}
+              />
+
+              <p className="text-xs text-muted-foreground">
+                Lý do này sẽ được lưu vào yêu cầu hủy và hiển thị cho khách hàng.
+              </p>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeRejectModal}
+                disabled={!!rejectingId}
+              >
+                Hủy
+              </Button>
+
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleSubmitReject}
+                disabled={!!rejectingId || !rejectReason.trim()}
+              >
+                {rejectingId ? 'Đang từ chối...' : 'Xác nhận từ chối'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </MainLayout>
   );
 }

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 const CART_KEY = 'matewear_cart';
 const CART_UPDATED_EVENT = 'stylehub_cart_updated';
+const SELECTED_CART_ITEM_IDS_KEY = 'matewear_selected_cart_item_ids';
 
 type AddItemOptions = {
   variantId: string;
@@ -36,6 +37,34 @@ function getMaxStock(item?: ChiTietGioHang | null) {
   if (!item) return 0;
 
   return Number(item.sanPham?.soLuongTon || 0);
+}
+
+function updateSelectedCartIdsAfterRemove(removedIds: number[]) {
+  try {
+    const raw = localStorage.getItem(SELECTED_CART_ITEM_IDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+
+    if (!Array.isArray(parsed)) {
+      localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+      return;
+    }
+
+    const removedSet = new Set(removedIds.map((id) => Number(id)));
+    const nextSelectedIds = parsed
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && !removedSet.has(id));
+
+    if (nextSelectedIds.length > 0) {
+      localStorage.setItem(
+        SELECTED_CART_ITEM_IDS_KEY,
+        JSON.stringify(nextSelectedIds)
+      );
+    } else {
+      localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+    }
+  } catch {
+    localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+  }
 }
 
 export function useCart() {
@@ -126,17 +155,17 @@ export function useCart() {
           next = prev.map((i) =>
             i.id === existing.id
               ? {
-                  ...i,
-                  sanPham: {
-                    ...cartProduct,
-                    soLuongTon: existingMaxStock || cartProduct.soLuongTon,
-                  },
-                  mauSac,
-                  kichCo,
-                  gia: finalPrice,
-                  hinhAnh: finalImage,
-                  soLuong: nextQuantity,
-                }
+                ...i,
+                sanPham: {
+                  ...cartProduct,
+                  soLuongTon: existingMaxStock || cartProduct.soLuongTon,
+                },
+                mauSac,
+                kichCo,
+                gia: finalPrice,
+                hinhAnh: finalImage,
+                soLuong: nextQuantity,
+              }
               : i
           );
         } else {
@@ -168,8 +197,23 @@ export function useCart() {
 
   const removeItem = useCallback((id: number) => {
     setItems((prev) => {
-      const next = prev.filter((i) => i.id !== id);
+      const next = prev.filter((i) => Number(i.id) !== Number(id));
       saveCart(next);
+      updateSelectedCartIdsAfterRemove([Number(id)]);
+      notifyCartUpdated();
+      return next;
+    });
+  }, []);
+
+  const removeItems = useCallback((ids: number[]) => {
+    const idSet = new Set(ids.map((id) => Number(id)).filter(Boolean));
+
+    if (idSet.size === 0) return;
+
+    setItems((prev) => {
+      const next = prev.filter((item) => !idSet.has(Number(item.id)));
+      saveCart(next);
+      updateSelectedCartIdsAfterRemove(Array.from(idSet));
       notifyCartUpdated();
       return next;
     });
@@ -210,6 +254,7 @@ export function useCart() {
   const clearCart = useCallback(() => {
     setItems([]);
     localStorage.removeItem(CART_KEY);
+    localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
     notifyCartUpdated();
   }, []);
 
@@ -298,6 +343,7 @@ export function useCart() {
     items,
     addItem,
     removeItem,
+    removeItems,
     updateQuantity,
     clearCart,
     refreshCartPrices,

@@ -65,6 +65,35 @@ function getVoucherCondition(voucher: UserVoucher) {
   return 'Áp dụng theo điều kiện của hệ thống.';
 }
 
+function getUserRemainingUses(voucher: UserVoucher) {
+  if (typeof voucher.userRemainingUses === 'number') {
+    return Math.max(0, voucher.userRemainingUses);
+  }
+
+  if (voucher.perUserLimit === null || voucher.perUserLimit === undefined) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Number(voucher.perUserLimit || 0) - Number(voucher.perUserUsed || 0)
+  );
+}
+
+function getVoucherUsageText(voucher: UserVoucher) {
+  const remaining = getUserRemainingUses(voucher);
+
+  if (remaining === null) {
+    return 'Không giới hạn lượt dùng';
+  }
+
+  if (remaining <= 0) {
+    return 'Bạn đã dùng hết lượt';
+  }
+
+  return `Bạn còn ${remaining} lượt dùng`;
+}
+
 export default function VoucherWalletPage() {
   const navigate = useNavigate();
 
@@ -190,6 +219,15 @@ export default function VoucherWalletPage() {
                         <span>HSD: {formatDate(voucher.endAt)}</span>
                       </div>
 
+                      <p
+                        className={`mt-2 text-sm font-medium ${getUserRemainingUses(voucher) === 0
+                          ? 'text-red-600'
+                          : 'text-emerald-700'
+                          }`}
+                      >
+                        {getVoucherUsageText(voucher)}
+                      </p>
+
                       <p className="mt-3 text-sm font-medium text-blue-600 group-hover:underline">
                         Điều kiện
                       </p>
@@ -232,6 +270,18 @@ export default function VoucherWalletPage() {
                 </h3>
                 <p className="leading-7 text-slate-700">
                   {formatDate(selectedVoucher.startAt)} - {formatDate(selectedVoucher.endAt)}
+                </p>
+              </div>
+
+              <div>
+                <h3 className="mb-2 font-bold text-slate-950">Lượt sử dụng</h3>
+                <p
+                  className={`leading-7 font-medium ${getUserRemainingUses(selectedVoucher) === 0
+                      ? 'text-red-600'
+                      : 'text-emerald-700'
+                    }`}
+                >
+                  {getVoucherUsageText(selectedVoucher)}
                 </p>
               </div>
 
